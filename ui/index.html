@@ -389,7 +389,7 @@ const lbl=i=>`${LOADERS[i.loader]} ${esc(i.mc)}`;
 function topbar(){
   const t={proj:["compass",S.pj&&S.pj.data?S.pj.data.title:"Project"],lib:["home","Home"],home:["home","Home"],browse:["compass",S.bsrv&&S.br.type===S.bsrvT?`Installing to ${S.bsrv}`:S.bt&&S.br.type!=="modpack"?`Installing to ${(S.instances.find(i=>i.id===S.bt)||{}).name||"instance"}`:S.start?"Start a new instance":"Discover "+TYPES[S.br.type].toLowerCase()],inst:["box",S.detail?S.detail.name:"Instance"],shots:["image","Screenshots"],servers:["server","Servers"],srv:["server",S.srvName||"Server"]}[S.page];
   const n=S.instances.length;
-  const DR=S.nres?"":"pywebview-drag-region";$("#top").className=DR;$("#top").innerHTML=`<div class="wm ${DR}"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7zm0 4.2L7 9v6l5 2.8 5-2.8V9z"/></svg>Orbit</div><button class="ar" id="bk" ${S.hi<1?"disabled":""} aria-label="Back">${ic("back","sm")}</button><button class="ar" id="fw" ${S.hi>=S.hist.length-1?"disabled":""} aria-label="Forward">${ic("fwd","sm")}</button><span class="ptitle ${DR}">${ic(t[0],"sm")}${esc(t[1])}</span><button class="ar" id="dlm" aria-label="Downloads" title="Downloads">${ic("dl","sm")}${S.tasks.some(t=>t.status==="running")?`<span class="bdg">${S.tasks.filter(t=>t.status==="running").length}</span>`:""}</button>${S.upd?`<button class="updb" id="orbupd" title="Orbit ${esc(S.upd.latest)} is available">${ic("refresh","sm")}${S.updBusy?"Updating...":"Update available"}</button>`:""}<span class="pill" id="pill"></span>${S.native?`<div class="wc"><button id="wmin" aria-label="Minimise"><svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg></button><button id="wmax" aria-label="Maximise"><svg viewBox="0 0 16 16">${S.maxed?'<rect x="3" y="5" width="8" height="8" rx="1"/><path d="M5 5V3h8v8h-2"/>':'<rect x="3" y="3" width="10" height="10" rx="1"/>'}</svg></button><button id="wcl" class="cl" aria-label="Close"><svg viewBox="0 0 16 16"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button></div>`:""}`;pillUpdate();
+  const DR=S.nres?"":"pywebview-drag-region";$("#top").className=DR;$("#top").innerHTML=`<div class="wm ${DR}"><svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7zm0 4.2L7 9v6l5 2.8 5-2.8V9z"/></svg>Orbit</div><button class="ar" id="bk" ${S.hi<1?"disabled":""} aria-label="Back">${ic("back","sm")}</button><button class="ar" id="fw" ${S.hi>=S.hist.length-1?"disabled":""} aria-label="Forward">${ic("fwd","sm")}</button><span class="ptitle ${DR}">${ic(t[0],"sm")}${esc(t[1])}</span><button class="ar" id="dlm" aria-label="Downloads" title="Downloads">${ic("dl","sm")}${S.tasks.some(t=>t.status==="running")?`<span class="bdg">${S.tasks.filter(t=>t.status==="running").length}</span>`:""}</button>${S.orbUpd?`<button class="updb" id="orbupd" title="Orbit ${esc(S.orbUpd.latest)} is available">${ic("refresh","sm")}${S.updBusy?"Updating...":"Update available"}</button>`:""}<span class="pill" id="pill"></span>${S.native?`<div class="wc"><button id="wmin" aria-label="Minimise"><svg viewBox="0 0 16 16"><path d="M3 8h10"/></svg></button><button id="wmax" aria-label="Maximise"><svg viewBox="0 0 16 16">${S.maxed?'<rect x="3" y="5" width="8" height="8" rx="1"/><path d="M5 5V3h8v8h-2"/>':'<rect x="3" y="3" width="10" height="10" rx="1"/>'}</svg></button><button id="wcl" class="cl" aria-label="Close"><svg viewBox="0 0 16 16"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button></div>`:""}`;pillUpdate();
   if(S.native){const A=window.pywebview.api;$("#wmin").onclick=()=>A.minimize();$("#wcl").onclick=()=>A.close();
     const mx=async()=>{S.maxed=await A.toggle_max();topbar();grips()};$("#wmax").onclick=mx;
     if(S.nres){/* Windows moves the window itself: drag to the top edge to maximise, pull a maximised window down to restore, snap to sides */
@@ -432,6 +432,16 @@ function nav(){
 }
 function go(p,id){S.hist=S.hist.slice(0,S.hi+1);S.hist.push([p,id]);S.hi=S.hist.length-1;return load(p,id)}
 async function load(p,id){
+  // A search typed on one page shouldn't still be there when you come back to it, so clear it when leaving the page.
+  const prev=S.page;
+  if(p!==prev){
+    if(prev==="shots")S.sh.q="";
+    if(prev==="browse"){Object.assign(S.br,{q:"",page:1,cats:[],hits:[],total:0,err:"",loading:false})}   // forget the search and its results
+    if(prev==="home"||prev==="lib")S.ls="";
+    if(prev==="inst")S.cq="";
+    if(prev==="srv")S.scq="";
+  }
+  if(p==="inst"&&id&&id!==S.inst)S.cq="";
   S.page=p;if(id&&p!=="proj"&&p!=="srv")S.inst=id;
   if(p==="srv"){if(S.srvName!==id){S.stab="overview";S.sfp="";S.scq=""}S.srvName=id}
   if(p==="proj"&&(!S.pj||S.pj.ident!==id))S.pj={ident:id,type:"mod",inst:null,tab:"desc",data:null,versions:null,vf:{ch:"",mc:"",ld:""},ctx:null};
@@ -1758,10 +1768,10 @@ function pImport(p){
   p.querySelectorAll("[data-rs]").forEach(b=>b.onclick=()=>save(b.dataset.rs,""));
 }
 async function startUpdate(){
-  if(S.updBusy||!S.upd)return;
+  if(S.updBusy||!S.orbUpd)return;
   let busy=false;try{busy=Object.keys((await api("/launch-status")).running||{}).length>0}catch(e){}
-  const notes=(S.upd.notes||"").split("\n").slice(0,10).join("\n");
-  if(!confirm("Update Orbit to "+S.upd.latest+"?"+(notes?"\n\n"+notes:"")+"\n\nOrbit will close, install the update and open again by itself."+(busy?"\n\nA game is running; it will be closed too. Save your world first.":"")))return;
+  const notes=(S.orbUpd.notes||"").split("\n").slice(0,10).join("\n");
+  if(!confirm("Update Orbit to "+S.orbUpd.latest+"?"+(notes?"\n\n"+notes:"")+"\n\nOrbit will close, install the update and open again by itself."+(busy?"\n\nA game is running; it will be closed too. Save your world first.":"")))return;
   S.updBusy=true;topbar();
   try{await api("/update/install","POST",{})}catch(e){S.updBusy=false;topbar();toast(e.message,8000)}
 }
@@ -1771,7 +1781,7 @@ async function checkUpdate(quiet){
     if(i.last_error)toast("The last update didn't finish; the old version was kept. "+i.last_error,12000);
     if(!i.updater)return null;
     const r=await api("/update/check","POST",{});
-    S.upd=r.available?r:null;topbar();return r;
+    S.orbUpd=r.available?r:null;topbar();return r;
   }catch(e){if(!quiet)throw e;return null}
 }
 function pAbout(p){
