@@ -1,0 +1,596 @@
+//! Mod manager core (port of modrinth_mods.py): install / update / remove content from Modrinth and
+//! CurseForge, .mrpack modpacks, search, project pages.
+use crate::modrinth::{api_get, cf_get, cf_key, jl, CF_GAME_ID, MRPACK_HOSTS};
+use crate::store::Instance;
+use crate::util::{download_file, host_of, safe_join, track_expected, Res};
+use serde_json::{json, Map, Value};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+
+pub const CF_LOADERS: [(&str, i64); 4] = [("forge", 1), ("fabric", 4), ("quilt", 5), ("neoforge", 6)];
+pub fn cf_loader(l: &str) -> Option<i64> { CF_LOADERS.iter().find(|(n, _)| *n == l).map(|x| x.1) }
+pub fn is_loader(l: &str) -> bool { cf_loader(l).is_some() }
+
+/// (type, directory inside an instance, CurseForge class id)
+pub const TYPES: [(&str, &str, i64); 5] = [
+    ("modpack", "", 4471), ("mod", "mods", 6), ("resourcepack", "resourcepacks", 12),
+    ("datapack", "datapacks", 6945), ("shader", "shaderpacks", 6552),
+];
+pub fn type_dir(t: &str) -> &'static str { TYPES.iter().find(|x| x.0 == t).map(|x| x.1).unwrap_or("mods") }
+pub fn type_class(t: &str) -> i64 { TYPES.iter().find(|x| x.0 == t).map(|x| x.2).unwrap_or(6) }
+pub fn is_type(t: &str) -> bool { TYPES.iter().any(|x| x.0 == t) }
+pub fn dir_type(d: &str) -> Option<&'static str> { TYPES.iter().find(|x| !x.1.is_empty() && x.1 == d).map(|x| x.0) }
+
+pub const MRPACK_LOADERS: [(&str, &str); 4] = [("fabric-loader", "fabric"), ("quilt-loader", "quilt"), ("forge", "forge"), ("neoforge", "neoforge")];
+
+pub type Log = Vec<String>;
+
+impl Instance {
+    pub fn dir_for(&self, ptype: Option<&str>) -> PathBuf {
+        self.root.join(type_dir(ptype.filter(|t| !t.is_empty()).unwrap_or("mod")))
+    }
+    pub fn mods(&self) -> &Map<String, Value> {
+        static EMPTY: std::sync::OnceLock<Map<String, Value>> = std::sync::OnceLock::new();
+        self.state["mods"].as_object().unwrap_or_else(|| EMPTY.get_or_init(Map::new))
+    }
+    pub fn mods_mut(&mut self) -> &mut Map<String, Value> {
+        if !self.state["mods"].is_object() { self.state["mods"] = json!({}); }
+        self.state["mods"].as_object_mut().unwrap()
+    }
+    /// The {mc, loader, ...} config; an error when the instance was never initialised.
+    pub fn cfg(&self) -> Res<&Value> {
+        match self.state["config"].as_object() { Some(o) if !o.is_empty() => Ok(&self.state["config"]), _ => Err("Instance has no game version / loader set.".into()) }
+    }
+    pub fn mc(&self) -> String { self.state["config"]["mc"].as_str().unwrap_or("").to_string() }
+    pub fn loader(&self) -> String { self.state["config"]["loader"].as_str().unwrap_or("vanilla").to_string() }
+}
+
+fn st(v: &Value, k: &str) -> String { v[k].as_str().unwrap_or("").to_string() }
+fn quote(s: &str) -> String { percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string() }
+
+pub fn content_path(inst: &Instance, m: &Value) -> PathBuf {
+    match m["relpath"].as_str().filter(|r| !r.is_empty()) {
+        Some(r) => inst.root.join(r),
+        None => inst.dir_for(m["type"].as_str()).join(m["filename"].as_str().unwrap_or("")),
+    }
+}
+
+fn disabled_name(p: &Path) -> PathBuf { let mut n = p.file_name().unwrap_or_default().to_os_string(); n.push(".disabled"); p.with_file_name(n) }
+pub fn disabled_path(p: &Path) -> PathBuf { disabled_name(p) }
+
+fn dup_elsewhere(inst: &Instance, key: &str, slug: &str) -> Option<Value> {
+    inst.mods().iter().find(|(k, m)| k.as_str() != key && m["slug"].as_str() == Some(slug)).map(|(_, m)| m.clone())
+}
+
+// ---------- Modrinth ----------
+
+pub fn best_version(project: &str, mc: &str, loader: Option<&str>) -> Res<Option<Value>> {
+    let mut p = vec![("game_versions", jl(&[mc]))];
+    if let Some(l) = loader { p.push(("loaders", jl(&[l]))); }
+    let v = api_get(&format!("/project/{project}/version"), &p)?;
+    let Some(arr) = v.as_array().filter(|a| !a.is_empty()) else { return Ok(None) };
+    Ok(Some(arr.iter().find(|x| x["version_type"] == "release").unwrap_or(&arr[0]).clone()))
+}
+
+fn primary_file(v: &Value) -> Option<&Value> {
+    let files = v["files"].as_array()?;
+    files.iter().find(|f| f["primary"] == true).or_else(|| files.first())
+}
+
+pub fn install_project(inst: &mut Instance, project: &str, explicit: bool, seen: &mut HashSet<String>, ptype: &str, log: &mut Log) -> Res<()> {
+    let cfg = inst.cfg()?.clone();
+    let meta = api_get(&format!("/project/{project}"), &[])?;
+    if meta.is_null() { log.push(format!("! project '{project}' not found on Modrinth")); return Ok(()); }
+    let pid = st(&meta, "id");
+    if !seen.insert(pid.clone()) { return Ok(()); }
+    let title = st(&meta, "title");
+    if let Some(d) = dup_elsewhere(inst, &pid, &st(&meta, "slug")) {
+        log.push(format!("= {title} is already installed from {}, skipping", d["source"].as_str().unwrap_or("modrinth")));
+        return Ok(());
+    }
+    let loader = (ptype == "mod").then(|| st(&cfg, "loader")).filter(|l| l != "vanilla");
+    let Some(version) = best_version(&pid, &st(&cfg, "mc"), loader.as_deref())? else {
+        log.push(format!("! {title}: no version for {} / {}", st(&cfg, "mc"), st(&cfg, "loader")));
+        return Ok(());
+    };
+    let installed = inst.mods().get(&pid).cloned();
+    if let Some(i) = &installed {
+        if i["version_id"] == version["id"] {
+            log.push(format!("= {title} already up to date"));
+            let e = i["explicit"].as_bool().unwrap_or(false) || explicit;
+            inst.mods_mut().get_mut(&pid).unwrap()["explicit"] = json!(e);
+            return Ok(());
+        }
+    }
+    if ptype == "mod" {
+        for dep in version["dependencies"].as_array().cloned().unwrap_or_default() {
+            match dep["dependency_type"].as_str() {
+                Some("required") => {
+                    let mut dp = dep["project_id"].as_str().map(String::from);
+                    if dp.is_none() {
+                        if let Some(vid) = dep["version_id"].as_str() {
+                            let dv = api_get(&format!("/version/{vid}"), &[])?;
+                            dp = dv["project_id"].as_str().map(String::from);
+                        }
+                    }
+                    if let Some(d) = dp { install_project(inst, &d, false, seen, "mod", log)?; }
+                }
+                Some("incompatible") => log.push(format!("! note: {title} is incompatible with project {}", dep["project_id"].as_str().unwrap_or("?"))),
+                _ => {}
+            }
+        }
+    }
+    let dest = inst.dir_for(Some(ptype));
+    let f = primary_file(&version).ok_or("That version has no files.")?.clone();
+    let filename = download_file(f["url"].as_str().unwrap_or(""), &dest, f["filename"].as_str().unwrap_or(""), Some("sha512"), f["hashes"]["sha512"].as_str())?;
+    if let Some(i) = &installed {
+        if i["filename"].as_str() != Some(&filename) {
+            let _ = std::fs::remove_file(inst.dir_for(i["type"].as_str()).join(i["filename"].as_str().unwrap_or("")));
+        }
+    }
+    let expl = explicit || installed.as_ref().map(|i| i["explicit"].as_bool().unwrap_or(false)).unwrap_or(false);
+    let ver = st(&version, "version_number");
+    inst.mods_mut().insert(pid, json!({"type": ptype, "icon_url": meta["icon_url"], "title": title, "slug": meta["slug"],
+        "source": "modrinth", "version_id": version["id"], "version": ver, "filename": filename, "explicit": expl}));
+    log.push(format!("+ {title} {ver}"));
+    Ok(())
+}
+
+// ---------- CurseForge ----------
+
+pub fn cf_resolve(name: &str, ptype: &str) -> Res<i64> {
+    if let Ok(n) = name.parse::<i64>() { return Ok(n); }
+    let res = cf_get("/mods/search", &[("gameId", CF_GAME_ID.to_string()), ("classId", type_class(ptype).to_string()), ("slug", name.to_string())])?;
+    res["data"][0]["id"].as_i64().ok_or_else(|| format!("CurseForge: no mod with slug '{name}'."))
+}
+
+pub fn cf_best_file(mod_id: i64, mc: &str, loader: Option<&str>) -> Res<Option<Value>> {
+    let mut p = vec![("gameVersion", mc.to_string()), ("pageSize", "50".to_string())];
+    if let Some(l) = loader.and_then(cf_loader) { p.push(("modLoaderType", l.to_string())); }
+    let res = cf_get(&format!("/mods/{mod_id}/files"), &p)?;
+    let mut files: Vec<Value> = res["data"].as_array().cloned().unwrap_or_default().into_iter().filter(|f| f["isAvailable"] != false).collect();
+    if files.is_empty() { return Ok(None); }
+    files.sort_by(|a, b| st(b, "fileDate").cmp(&st(a, "fileDate")));
+    Ok(Some(files.iter().find(|f| f["releaseType"] == 1).unwrap_or(&files[0]).clone()))
+}
+
+fn cf_hash(f: &Value) -> (Option<&'static str>, Option<String>) {
+    for h in f["hashes"].as_array().into_iter().flatten() {
+        if h["algo"] == 1 { return (Some("sha1"), h["value"].as_str().map(String::from)); }
+    }
+    (None, None)
+}
+
+pub fn install_cf(inst: &mut Instance, mod_id: i64, explicit: bool, seen: &mut HashSet<String>, ptype: &str, log: &mut Log) -> Res<()> {
+    let cfg = inst.cfg()?.clone();
+    let key = format!("cf:{mod_id}");
+    if !seen.insert(key.clone()) { return Ok(()); }
+    let meta = cf_get(&format!("/mods/{mod_id}"), &[])?["data"].clone();
+    if meta.is_null() { log.push(format!("! CurseForge project {mod_id} not found")); return Ok(()); }
+    let title = st(&meta, "name");
+    let page = meta["links"]["websiteUrl"].as_str().map(String::from)
+        .unwrap_or_else(|| format!("https://www.curseforge.com/minecraft/mc-mods/{}", st(&meta, "slug")));
+    if let Some(d) = dup_elsewhere(inst, &key, &st(&meta, "slug")) {
+        log.push(format!("= {title} is already installed from {}, skipping", d["source"].as_str().unwrap_or("modrinth")));
+        return Ok(());
+    }
+    let loader = (ptype == "mod").then(|| st(&cfg, "loader"));
+    let Some(f) = cf_best_file(mod_id, &st(&cfg, "mc"), loader.as_deref())? else {
+        log.push(format!("! {title}: no file for {} / {}", st(&cfg, "mc"), st(&cfg, "loader")));
+        return Ok(());
+    };
+    let installed = inst.mods().get(&key).cloned();
+    if let Some(i) = &installed {
+        if i["version_id"].as_str() == Some(&f["id"].to_string()) {
+            log.push(format!("= {title} already up to date"));
+            let e = i["explicit"].as_bool().unwrap_or(false) || explicit;
+            inst.mods_mut().get_mut(&key).unwrap()["explicit"] = json!(e);
+            return Ok(());
+        }
+    }
+    if ptype == "mod" {
+        for dep in f["dependencies"].as_array().cloned().unwrap_or_default() {
+            match dep["relationType"].as_i64() {
+                Some(3) => { if let Some(id) = dep["modId"].as_i64() { install_cf(inst, id, false, seen, "mod", log)?; } }
+                Some(5) => log.push(format!("! note: {title} is incompatible with CurseForge project {}", dep["modId"])),
+                _ => {}
+            }
+        }
+    }
+    let Some(url) = f["downloadUrl"].as_str().filter(|u| !u.is_empty()) else {
+        log.push(format!("! {title}: the author doesn't allow downloads from other apps. Download it manually: {page}/files/{}", f["id"]));
+        return Ok(());
+    };
+    let (algo, exp) = cf_hash(&f);
+    let dest = inst.dir_for(Some(ptype));
+    let filename = download_file(url, &dest, f["fileName"].as_str().unwrap_or(""), algo, exp.as_deref())?;
+    if let Some(i) = &installed {
+        if i["filename"].as_str() != Some(&filename) {
+            let _ = std::fs::remove_file(inst.dir_for(i["type"].as_str()).join(i["filename"].as_str().unwrap_or("")));
+        }
+    }
+    let expl = explicit || installed.as_ref().map(|i| i["explicit"].as_bool().unwrap_or(false)).unwrap_or(false);
+    let disp = f["displayName"].as_str().map(String::from).unwrap_or_else(|| f["id"].to_string());
+    inst.mods_mut().insert(key, json!({"type": ptype, "icon_url": meta["logo"]["thumbnailUrl"], "title": title, "slug": meta["slug"],
+        "source": "curseforge", "version_id": f["id"].to_string(), "version": disp, "filename": filename, "explicit": expl}));
+    log.push(format!("+ {title} {disp} (CurseForge)"));
+    Ok(())
+}
+
+// ---------- modpacks (.mrpack) ----------
+
+pub struct PackInfo {
+    pub title: String, pub mc: String, pub loader: String, pub loader_version: String, pub version: String,
+    pub project_id: Value, pub icon_url: Value, pub pack: PathBuf, pub index: Value,
+}
+
+pub fn load_mrpack(path: &Path) -> Res<PackInfo> {
+    let bad = || "That file is not a valid .mrpack modpack.".to_string();
+    let f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut z = zip::ZipArchive::new(f).map_err(|_| bad())?;
+    let idx: Value = {
+        let mut e = z.by_name("modrinth.index.json").map_err(|_| bad())?;
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut e, &mut s).map_err(|_| bad())?;
+        serde_json::from_str(s.trim_start_matches('\u{feff}')).map_err(|_| bad())?
+    };
+    let deps = idx["dependencies"].as_object().cloned().unwrap_or_default();
+    let key = MRPACK_LOADERS.iter().find(|(k, _)| deps.contains_key(*k));
+    let loader = match key {
+        Some((_, l)) => Some(l.to_string()),
+        None if deps.contains_key("minecraft") && deps.keys().all(|k| k == "minecraft") => Some("vanilla".to_string()),
+        None => None,
+    };
+    let mc = deps.get("minecraft").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let (true, Some(loader)) = (!mc.is_empty(), loader) else {
+        return Err("Only vanilla, Fabric, Quilt, Forge and NeoForge modpacks are supported.".into());
+    };
+    let lv = key.and_then(|(k, _)| deps.get(*k)).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    Ok(PackInfo {
+        title: idx["name"].as_str().filter(|s| !s.is_empty()).map(String::from).unwrap_or(stem), mc, loader, loader_version: lv,
+        version: idx["versionId"].as_str().unwrap_or("").to_string(), project_id: Value::Null, icon_url: Value::Null,
+        pack: path.to_path_buf(), index: idx,
+    })
+}
+
+pub fn fetch_modpack(ident: &str, tmp: &Path, mc: Option<&str>) -> Res<PackInfo> {
+    let meta = api_get(&format!("/project/{ident}"), &[])?;
+    if meta.is_null() { return Err("That modpack wasn't found on Modrinth.".into()); }
+    let title = st(&meta, "title");
+    let params: Vec<(&str, String)> = mc.map(|m| vec![("game_versions", jl(&[m]))]).unwrap_or_default();
+    let versions = api_get(&format!("/project/{}/version", st(&meta, "id")), &params)?;
+    let Some(vs) = versions.as_array().filter(|a| !a.is_empty()) else {
+        return Err(match mc { Some(m) => format!("{title} has no version for Minecraft {m}."), None => format!("{title} has no versions.") });
+    };
+    let v = vs.iter().find(|x| x["version_type"] == "release").unwrap_or(&vs[0]);
+    let f = v["files"].as_array().into_iter().flatten().find(|x| x["filename"].as_str().map(|n| n.ends_with(".mrpack")).unwrap_or(false))
+        .ok_or_else(|| format!("{title} {} has no .mrpack file.", st(v, "version_number")))?;
+    let name = download_file(f["url"].as_str().unwrap_or(""), tmp, f["filename"].as_str().unwrap_or(""), Some("sha512"), f["hashes"]["sha512"].as_str())?;
+    let mut info = load_mrpack(&tmp.join(name))?;
+    info.title = title; info.version = st(v, "version_number"); info.project_id = meta["id"].clone(); info.icon_url = meta["icon_url"].clone();
+    Ok(info)
+}
+
+pub fn apply_modpack(inst: &mut Instance, info: &PackInfo, log: &mut Log) -> Res<()> {
+    std::fs::create_dir_all(&inst.root).map_err(|e| e.to_string())?;
+    let files: Vec<Value> = info.index["files"].as_array().cloned().unwrap_or_default();
+    let wanted = |f: &Value| f["env"]["client"] != "unsupported";
+    track_expected(files.iter().filter(|f| wanted(f)).count());
+    let total = files.len();
+    for (n, fe) in files.iter().enumerate() {
+        if !wanted(fe) { continue; }
+        let rel = fe["path"].as_str().unwrap_or("");
+        let target = safe_join(&inst.root, rel)?;
+        let urls: Vec<&str> = fe["downloads"].as_array().into_iter().flatten().filter_map(|u| u.as_str())
+            .filter(|u| MRPACK_HOSTS.contains(&host_of(u).as_str())).collect();
+        if urls.is_empty() { return Err(format!("No allowed download source for {rel}.")); }
+        let (algo, exp) = if let Some(h) = fe["hashes"]["sha512"].as_str() { (Some("sha512"), Some(h)) }
+            else if let Some(h) = fe["hashes"]["sha1"].as_str() { (Some("sha1"), Some(h)) } else { (None, None) };
+        let parent = target.parent().unwrap_or(&inst.root).to_path_buf();
+        let fname = target.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        for (k, u) in urls.iter().enumerate() {
+            match download_file(u, &parent, &fname, algo, exp) { Ok(_) => break, Err(e) => if k == urls.len() - 1 { return Err(e); } }
+        }
+        let top = rel.split('/').next().unwrap_or("");
+        if let Some(t) = dir_type(top) {
+            let stem = Path::new(&fname).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            inst.mods_mut().insert(format!("pack:{rel}"), json!({"type": t, "title": stem, "slug": stem, "source": "modpack", "version_id": "",
+                "version": info.version, "filename": fname, "relpath": rel, "explicit": true}));
+        }
+        log.push(format!("+ [{}/{total}] {fname}", n + 1));
+    }
+    let f = std::fs::File::open(&info.pack).map_err(|e| e.to_string())?;
+    let mut z = zip::ZipArchive::new(f).map_err(|e| e.to_string())?;
+    for i in 0..z.len() {
+        let mut e = z.by_index(i).map_err(|e| e.to_string())?;
+        let name = e.name().to_string();
+        let (head, rel) = name.split_once('/').unwrap_or((&name, ""));
+        if !(head == "overrides" || head == "client-overrides") || rel.is_empty() || e.is_dir() { continue; }
+        let t = safe_join(&inst.root, rel)?;
+        if let Some(p) = t.parent() { std::fs::create_dir_all(p).map_err(|e| e.to_string())?; }
+        let mut out = std::fs::File::create(&t).map_err(|e| e.to_string())?;
+        std::io::copy(&mut e, &mut out).map_err(|e| e.to_string())?;
+    }
+    inst.state["modpack"] = json!({"title": info.title, "version": info.version, "project_id": info.project_id});
+    inst.save()?;
+    // Match the pack's files (and any loose jars in its overrides) with Modrinth: real names, icons, update checks.
+    // Not being able to reach Modrinth right now must not fail the install, so this is best effort.
+    crate::gamedata::sync_untracked(inst);
+    let linked = crate::importers::link_modrinth(inst);
+    inst.state["mr_link"] = json!(1);
+    inst.save()?;
+    if linked["linked"].as_i64().unwrap_or(0) > 0 { log.push(format!("Matched {} of {} files with Modrinth", linked["linked"], linked["checked"])); }
+    log.push(format!("Installed modpack {} {}", info.title, info.version));
+    Ok(())
+}
+
+// ---------- search ----------
+
+fn env_tag(client: &str, server: &str) -> Option<&'static str> {
+    if client == "unsupported" && server != "unsupported" { return Some("server"); }
+    if server == "unsupported" && client != "unsupported" { return Some("client"); }
+    if !client.is_empty() && !server.is_empty() { return Some("client-or-server"); }
+    None
+}
+
+pub fn search_projects(source: &str, query: &str, mc: &str, loader: &str, limit: usize, ptype: &str, offset: usize, sort: &str, cats: &[String]) -> Res {
+    let mut out = vec![];
+    let total;
+    if source == "curseforge" {
+        let sf = match sort { "downloads" => 6, "newest" => 11, "updated" => 3, _ => 2 };
+        let mut p = vec![("gameId", CF_GAME_ID.to_string()), ("classId", type_class(ptype).to_string()), ("sortField", sf.to_string()),
+            ("sortOrder", "desc".into()), ("pageSize", limit.to_string()), ("index", offset.to_string())];
+        if !query.is_empty() { p.push(("searchFilter", query.into())); }
+        if !mc.is_empty() { p.push(("gameVersion", mc.into())); }
+        if let (Some(l), true) = (cf_loader(loader), ptype == "mod" || ptype == "modpack") { p.push(("modLoaderType", l.to_string())); }
+        let res = cf_get("/mods/search", &p)?;
+        total = res["pagination"]["totalCount"].as_i64().unwrap_or(0);
+        for m in res["data"].as_array().into_iter().flatten() {
+            let slug = st(m, "slug");
+            out.push(json!({"source": "curseforge", "key": format!("cf:{}", m["id"]), "ident": m["id"].to_string(), "slug": slug, "title": m["name"],
+                "author": m["authors"][0]["name"].as_str().unwrap_or("unknown"), "description": m["summary"].as_str().unwrap_or(""),
+                "downloads": m["downloadCount"].as_f64().unwrap_or(0.0) as i64, "follows": m["thumbsUpCount"].as_i64().unwrap_or(0),
+                "updated": m["dateModified"], "icon_url": m["logo"]["thumbnailUrl"],
+                "categories": m["categories"].as_array().into_iter().flatten().filter_map(|c| c["name"].as_str()).take(4).collect::<Vec<_>>(),
+                "url": m["links"]["websiteUrl"].as_str().map(String::from).unwrap_or_else(|| format!("https://www.curseforge.com/minecraft/mc-mods/{slug}")),
+                "downloadable": m["allowModDistribution"] != false}));
+        }
+    } else {
+        let mut facets: Vec<Vec<String>> = vec![vec![format!("project_type:{}", if ptype == "datapack" { "mod" } else { ptype })]];
+        if ptype == "datapack" { facets.push(vec!["categories:datapack".into()]); }
+        else if ptype == "mod" || ptype == "modpack" {
+            if ptype == "mod" { facets.push(vec!["categories!=datapack".into()]); }
+            if !loader.is_empty() { facets.push(vec![format!("categories:{loader}")]); }
+        }
+        if !mc.is_empty() { facets.push(vec![format!("versions:{mc}")]); }
+        for c in cats { facets.push(vec![format!("categories:{c}")]); }
+        let idx = match sort { "downloads" | "follows" | "newest" | "updated" => sort, _ => "relevance" };
+        let mut p = vec![("facets", serde_json::to_string(&facets).unwrap()), ("limit", limit.to_string()), ("index", idx.to_string())];
+        if !query.is_empty() { p.push(("query", query.into())); }
+        if offset > 0 { p.push(("offset", offset.to_string())); }
+        let res = api_get("/search", &p)?;
+        total = res["total_hits"].as_i64().unwrap_or(0);
+        for h in res["hits"].as_array().into_iter().flatten() {
+            let mut tags: Vec<String> = env_tag(h["client_side"].as_str().unwrap_or(""), h["server_side"].as_str().unwrap_or("")).map(String::from).into_iter().collect();
+            tags.extend(h["display_categories"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)));
+            let slug = st(h, "slug");
+            out.push(json!({"source": "modrinth", "key": h["project_id"], "ident": slug, "slug": slug, "title": h["title"],
+                "author": h["author"].as_str().unwrap_or("unknown"), "description": h["description"], "downloads": h["downloads"],
+                "follows": h["follows"].as_i64().unwrap_or(0), "updated": h["date_modified"], "icon_url": h["icon_url"],
+                "categories": tags.iter().take(5).collect::<Vec<_>>(), "more": tags.len().saturating_sub(5),
+                "url": format!("https://modrinth.com/{}/{slug}", if ptype == "datapack" { "mod" } else { ptype }), "downloadable": true}));
+        }
+    }
+    Ok(json!({"hits": out, "total": total}))
+}
+
+pub fn install_mod(inst: &mut Instance, source: &str, ident: &str, explicit: bool, ptype: &str, log: &mut Log) -> Res<()> {
+    if !is_type(ptype) || ptype == "modpack" { return Err(format!("Can't add '{ptype}' to an instance.")); }
+    let mut seen = HashSet::new();
+    if source == "curseforge" { let id = cf_resolve(ident, ptype)?; install_cf(inst, id, explicit, &mut seen, ptype, log) }
+    else { install_project(inst, ident, explicit, &mut seen, ptype, log) }
+}
+
+// ---------- dependencies of everything in mods/ (see deps.rs) ----------
+
+pub fn deps_ctx(inst: &Instance) -> crate::deps::Ctx {
+    let l = inst.loader();
+    crate::deps::Ctx { mc: inst.mc(), platform: l.clone(), server: false, loaders: vec![l] }
+}
+
+struct InstInstaller<'a>(&'a mut Instance);
+impl crate::deps::Installer for InstInstaller<'_> {
+    fn installed(&self, pid: &str) -> Option<String> { self.0.mods().get(pid).map(|m| st(m, "title")) }
+    fn install(&mut self, pid: &str, seen: &mut HashSet<String>, log: &mut Log) -> Res<()> { install_project(self.0, pid, false, seen, "mod", log) }
+}
+
+/// What the jars in this instance's mods folder need and don't have, without touching the network.
+pub fn deps_report(inst: &Instance) -> Option<crate::deps::Report> {
+    if inst.loader() == "vanilla" || inst.cfg().is_err() { return None; }
+    Some(crate::deps::analyze(&crate::deps::scan_dir(&inst.dir_for(Some("mod"))), &deps_ctx(inst)))
+}
+
+/// Install every missing dependency of the mods in this instance, whatever way they got there.
+/// None for instances that can't have mods.
+pub fn ensure_deps(inst: &mut Instance, log: &mut Log) -> Option<crate::deps::Outcome> {
+    if inst.loader() == "vanilla" || inst.cfg().is_err() { return None; }
+    let (ctx, dir) = (deps_ctx(inst), inst.dir_for(Some("mod")));
+    let out = crate::deps::ensure(&dir, &ctx, &mut InstInstaller(inst), log);
+    let _ = inst.save();
+    Some(out)
+}
+
+// ---------- updates / versions ----------
+
+pub fn updatable(key: &str, m: &Value) -> bool {
+    !(key.starts_with("pack:") || key.starts_with("tl:") || key.starts_with("imp:") || m["disabled"] == true)
+}
+
+fn ptype_loader(inst: &Instance, t: &str) -> Option<String> {
+    let l = inst.loader();
+    (t == "mod" && l != "vanilla").then_some(l)
+}
+
+pub fn par_map<T: Sync, R: Send>(items: &[T], workers: usize, f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let out: std::sync::Mutex<Vec<Option<R>>> = std::sync::Mutex::new((0..items.len()).map(|_| None).collect());
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|s| {
+        for _ in 0..workers.min(items.len()).max(1) {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if i >= items.len() { break; }
+                let r = f(&items[i]);
+                out.lock().unwrap()[i] = Some(r);
+            });
+        }
+    });
+    out.into_inner().unwrap().into_iter().map(|x| x.unwrap()).collect()
+}
+
+pub fn check_updates(inst: &Instance) -> Vec<Value> {
+    let mc = inst.mc();
+    let items: Vec<(String, Value)> = inst.mods().iter().filter(|(k, m)| updatable(k, m)).map(|(k, m)| (k.clone(), m.clone())).collect();
+    let res = par_map(&items, 8, |(key, m)| -> Option<Value> {
+        let t = m["type"].as_str().unwrap_or("mod");
+        let ld = ptype_loader(inst, t);
+        if let Some(id) = key.strip_prefix("cf:") {
+            if cf_key().is_empty() { return None; }
+            let f = cf_best_file(id.parse().ok()?, &mc, ld.as_deref()).ok()??;
+            if f["id"].to_string() != m["version_id"].as_str().unwrap_or("") {
+                return Some(json!({"key": key, "new_id": f["id"].to_string(), "new": f["displayName"].as_str().map(String::from).unwrap_or_else(|| f["id"].to_string())}));
+            }
+        } else {
+            let v = best_version(key, &mc, ld.as_deref()).ok()??;
+            if v["id"] != m["version_id"] { return Some(json!({"key": key, "new_id": v["id"], "new": v["version_number"]})); }
+        }
+        None
+    });
+    items.iter().zip(res).filter_map(|((_, m), r)| {
+        r.map(|mut r| { r["title"] = m["title"].clone(); r["icon_url"] = m["icon_url"].clone(); r["current"] = json!(m["version"].as_str().unwrap_or("")); r })
+    }).collect()
+}
+
+pub fn list_versions(inst: &Instance, key: &str) -> Res<Vec<Value>> {
+    let m = inst.mods().get(key).ok_or("That item isn't in this instance.")?.clone();
+    let mc = inst.mc();
+    let ld = ptype_loader(inst, m["type"].as_str().unwrap_or("mod"));
+    let mut out = vec![];
+    if let Some(id) = key.strip_prefix("cf:") {
+        let mut p = vec![("gameVersion", mc), ("pageSize", "50".to_string())];
+        if let Some(l) = ld.as_deref().and_then(cf_loader) { p.push(("modLoaderType", l.to_string())); }
+        let res = cf_get(&format!("/mods/{id}/files"), &p)?;
+        let mut files: Vec<Value> = res["data"].as_array().cloned().unwrap_or_default().into_iter().filter(|f| f["isAvailable"] != false).collect();
+        files.sort_by(|a, b| st(b, "fileDate").cmp(&st(a, "fileDate")));
+        for f in files {
+            let ty = match f["releaseType"].as_i64() { Some(2) => "beta", Some(3) => "alpha", _ => "release" };
+            out.push(json!({"id": f["id"].to_string(), "name": f["displayName"].as_str().unwrap_or(""), "number": f["displayName"].as_str().unwrap_or(""),
+                "type": ty, "date": f["fileDate"], "current": f["id"].to_string() == m["version_id"].as_str().unwrap_or("")}));
+        }
+    } else {
+        let mut p = vec![("game_versions", jl(&[mc]))];
+        if let Some(l) = &ld { p.push(("loaders", jl(&[l]))); }
+        let vs = api_get(&format!("/project/{key}/version"), &p)?;
+        for v in vs.as_array().into_iter().flatten() {
+            out.push(json!({"id": v["id"], "name": v["name"].as_str().unwrap_or(""), "number": v["version_number"], "type": v["version_type"],
+                "date": v["date_published"], "current": v["id"] == m["version_id"]}));
+        }
+    }
+    Ok(out)
+}
+
+pub fn install_version(inst: &mut Instance, key: &str, version_id: &str, ptype: &str, log: &mut Log) -> Res<()> {
+    if !inst.mods().contains_key(key) {
+        if key.starts_with("cf:") || !is_type(ptype) || ptype == "modpack" { return Err("That item isn't in this instance.".into()); }
+        let meta = api_get(&format!("/project/{key}"), &[])?;
+        if meta.is_null() { return Err("That project no longer exists.".into()); }
+        inst.mods_mut().insert(key.to_string(), json!({"type": ptype, "icon_url": meta["icon_url"], "title": meta["title"], "slug": meta["slug"],
+            "source": "modrinth", "version_id": "", "version": "", "filename": "", "explicit": true}));
+    }
+    let m = inst.mods()[key].clone();
+    let dest = inst.dir_for(m["type"].as_str());
+    let (filename, nid, nver);
+    if let Some(id) = key.strip_prefix("cf:") {
+        let f = cf_get(&format!("/mods/{id}/files/{version_id}"), &[])?["data"].clone();
+        let url = f["downloadUrl"].as_str().filter(|u| !u.is_empty()).ok_or("The author doesn't allow downloading that version from other apps.")?;
+        let (algo, exp) = cf_hash(&f);
+        filename = download_file(url, &dest, f["fileName"].as_str().unwrap_or(""), algo, exp.as_deref())?;
+        nid = f["id"].to_string(); nver = f["displayName"].as_str().map(String::from).unwrap_or_else(|| f["id"].to_string());
+    } else {
+        let v = api_get(&format!("/version/{version_id}"), &[])?;
+        if v.is_null() { return Err("That version no longer exists.".into()); }
+        let f = primary_file(&v).ok_or("That version has no files.")?.clone();
+        filename = download_file(f["url"].as_str().unwrap_or(""), &dest, f["filename"].as_str().unwrap_or(""), Some("sha512"), f["hashes"]["sha512"].as_str())?;
+        nid = st(&v, "id"); nver = st(&v, "version_number");
+    }
+    if m["filename"].as_str().map(|f| !f.is_empty() && f != filename).unwrap_or(false) {
+        let old = content_path(inst, &m);
+        let _ = std::fs::remove_file(&old);
+        let _ = std::fs::remove_file(disabled_name(&old));
+    }
+    if m["disabled"] == true {
+        let n = dest.join(&filename);
+        let _ = std::fs::rename(&n, disabled_name(&n));
+    }
+    let e = inst.mods_mut().get_mut(key).unwrap();
+    e["version_id"] = json!(nid); e["version"] = json!(nver); e["filename"] = json!(filename);
+    e.as_object_mut().unwrap().remove("relpath");
+    inst.save()?;
+    log.push(format!("~ {} {nver}", st(&m, "title")));
+    Ok(())
+}
+
+pub fn project_page(ident: &str) -> Res {
+    let p = api_get(&format!("/project/{}", quote(ident)), &[])?;
+    if p.is_null() { return Err("That project wasn't found on Modrinth.".into()); }
+    let team = api_get(&format!("/project/{}/members", st(&p, "id")), &[])?;
+    let mut team: Vec<Value> = team.as_array().cloned().unwrap_or_default();
+    team.sort_by_key(|t| t["ordering"].as_i64().unwrap_or(0));
+    let lic = &p["license"];
+    let cats: Vec<Value> = p["categories"].as_array().into_iter().flatten().chain(p["additional_categories"].as_array().into_iter().flatten()).cloned().collect();
+    Ok(json!({"id": p["id"], "slug": p["slug"], "title": p["title"], "description": p["description"], "body": p["body"].as_str().unwrap_or(""),
+        "icon_url": p["icon_url"], "downloads": p["downloads"], "followers": p["followers"].as_i64().unwrap_or(0), "type": p["project_type"],
+        "categories": cats, "game_versions": p["game_versions"].as_array().cloned().unwrap_or_default(), "loaders": p["loaders"].as_array().cloned().unwrap_or_default(),
+        "client": p["client_side"], "server": p["server_side"],
+        "license": lic["name"].as_str().filter(|s| !s.is_empty()).or(lic["id"].as_str()).unwrap_or(""),
+        "published": p["published"], "updated": p["updated"],
+        "links": {"issues": p["issues_url"], "source": p["source_url"], "wiki": p["wiki_url"], "discord": p["discord_url"], "donate": p["donation_urls"][0]["url"].as_str().unwrap_or("")},
+        "url": format!("https://modrinth.com/{}/{}", st(&p, "project_type"), st(&p, "slug")),
+        "members": team.iter().map(|t| json!({"name": t["user"]["username"].as_str().unwrap_or("?"), "avatar": t["user"]["avatar_url"],
+            "role": t["role"].as_str().unwrap_or(""), "owner": t["is_owner"] == true || t["role"] == "Owner"})).collect::<Vec<_>>()}))
+}
+
+pub fn project_versions(ident: &str) -> Res {
+    let vs = api_get(&format!("/project/{}/version", quote(ident)), &[])?;
+    Ok(json!(vs.as_array().into_iter().flatten().map(|v| json!({"id": v["id"], "number": v["version_number"], "name": v["name"].as_str().unwrap_or(""),
+        "type": v["version_type"], "date": v["date_published"], "downloads": v["downloads"].as_i64().unwrap_or(0),
+        "game_versions": v["game_versions"], "loaders": v["loaders"]})).collect::<Vec<_>>()))
+}
+
+pub fn cmd_update(inst: &mut Instance, keys: Option<&HashSet<String>>, log: &mut Log) -> Res<()> {
+    let list: Vec<(String, Value)> = inst.mods().iter().map(|(k, m)| (k.clone(), m.clone())).collect();
+    track_expected(keys.map(|k| k.len()).unwrap_or_else(|| list.iter().filter(|(k, m)| updatable(k, m)).count()));
+    let mut seen = HashSet::new();
+    for (key, m) in list {
+        if !updatable(&key, &m) || keys.map(|k| !k.contains(&key)).unwrap_or(false) { continue; }
+        let t = m["type"].as_str().unwrap_or("mod").to_string();
+        let explicit = m["explicit"].as_bool().unwrap_or(false);
+        if let Some(id) = key.strip_prefix("cf:") { install_cf(inst, id.parse().map_err(|_| "bad CurseForge id")?, explicit, &mut seen, &t, log)?; }
+        else { install_project(inst, &key, explicit, &mut seen, &t, log)?; }
+    }
+    inst.save()
+}
+
+pub fn cmd_remove(inst: &mut Instance, names: &[String], log: &mut Log) -> Res<()> {
+    for name in names {
+        let found = inst.mods().iter().find(|(k, m)| *k == name || m["slug"].as_str() == Some(name)).map(|(k, _)| k.clone());
+        let Some(k) = found else { log.push(format!("! '{name}' is not installed")); continue };
+        let m = inst.mods_mut().remove(&k).unwrap();
+        let p = content_path(inst, &m);
+        let _ = std::fs::remove_file(&p);
+        let _ = std::fs::remove_file(disabled_name(&p));
+        log.push(format!("- removed {}", st(&m, "title")));
+    }
+    inst.save()
+}
+
