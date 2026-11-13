@@ -99,3 +99,19 @@ current theme (7:1 in high contrast). Stored as the `accent` and `high_contrast`
 ## Notes
 - Some names on disk still say "quarry" (`quarry-profiles`, `quarry-export.json`, `quarry-launch.log`, ...). They are left
   as they are on purpose: renaming them would orphan existing players' data.
+
+## Add Optimization (Custom setup)
+
+Tick **Add Optimization** when creating a Fabric or NeoForge instance and Orbit adds performance mods after creating it.
+
+- **Target version and older.** Per loader, the ceiling is the `dependencies.minecraft` declared in the reference packs in
+  `assets/optimization/*.mrpack` (embedded at build time; only that field is read). The option works for that release version and
+  any release below it, and the API enforces this too. A mod is added only if Modrinth has a build for that exact version and
+  loader; otherwise it is skipped together with any libraries that were only needed for it.
+- **No mod list.** Mods are found per instance: Modrinth search in the `optimization` category for the loader + game version,
+  a real build (and builds of all required dependencies) checked for each hit, mutually `incompatible` mods dropped, then installed
+  with the normal hash-checked installer. Jars that the final scan says can't run here are removed.
+- **Never blocks creation.** The instance is always created; if Modrinth is unreachable or nothing fits, the reply's
+  `optimization` object carries `error`, `skipped` and `warnings`, and the UI shows them.
+
+API: `GET /api/optimization` -> `{loaders, ceilings}`; `POST /api/instances` accepts `"optimize": true`.

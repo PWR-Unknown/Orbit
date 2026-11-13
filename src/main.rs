@@ -14,6 +14,7 @@ mod launcher;
 mod mods;
 mod modrinth;
 mod mrpack;
+mod optimization;
 mod servers;
 mod store;
 mod tl;

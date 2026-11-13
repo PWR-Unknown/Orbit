@@ -2,7 +2,7 @@
 //! ui/index.html works as it is. Errors are plain strings -> HTTP 400 (NOT_PORTED: prefix -> 501).
 use crate::mods::{self, Log};
 use crate::util::{SharedTrack, Track};
-use crate::{auth, dialogs, gamedata, icons, importers, launcher, modrinth, mrpack, servers, store, tl};
+use crate::{auth, dialogs, gamedata, icons, importers, launcher, modrinth, mrpack, optimization, servers, store, tl};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -330,6 +330,30 @@ pub fn create_instance_raw(name: &str, mc: &str, loader: &str, lv: &str) -> Resu
 }
 
 fn create_instance(name: &str, mc: &str, loader: &str, lv: &str) -> Res { Ok(store::summary(&create_instance_raw(name, mc, loader, lv)?)) }
+
+/// loader -> the one game version "Add Optimization" works for (see optimization.rs).
+fn optimization_ceilings() -> std::collections::BTreeMap<String, String> {
+    optimization::ceilings(|loader| {
+        let vs = game_versions(false).ok()?;
+        vs["versions"].as_array()?.iter().filter_map(|v| v.as_str()).take(10)
+            .find(|mc| loader_versions(loader, mc).is_ok()).map(String::from)
+    })
+}
+
+fn optimization_info() -> Res { Ok(json!({"loaders": optimization::SUPPORTED, "ceilings": optimization_ceilings()})) }
+
+/// Custom setup with "Add Optimization" ticked. The rule is enforced here, before anything is created; after
+/// that the instance always exists and the optimization outcome (ok / error / skipped) rides along in the reply.
+fn create_instance_optimized(task: &Option<String>, name: &str, mc: &str, loader: &str, lv: &str) -> Res {
+    optimization::check(loader, mc, &optimization_ceilings())?;
+    let mut inst = create_instance_raw(name, mc, loader, lv)?;
+    let mut report = Value::Null;
+    let (log, _) = run_job(task, |log| { report = optimization::apply(&mut inst, log); Ok(()) });
+    let mut out = store::summary(&inst);
+    out["optimization"] = report;
+    out["log"] = json!(log);
+    Ok(out)
+}
 
 fn set_icon(inst: &mut store::Instance, data: Option<&[u8]>) -> Result<(), String> {
     if let Some(d) = data {
@@ -993,6 +1017,7 @@ pub fn route(r: &Req) -> Result<Out, String> {
             return j(Ok(json!({"ok": true})));
         }
         "/api/browse" if m == "POST" => return j(Ok(json!({"path": dialogs::pick_folder(s(b, "start"))}))),
+        "/api/optimization" => return j(optimization_info()),
         "/api/loader-versions" => return j(loader_versions(qs("loader"), qs("mc"))),
         "/api/pick-save" if m == "POST" => {
             let name = if s(b, "name").is_empty() { "modpack.mrpack" } else { s(b, "name") };
@@ -1024,6 +1049,7 @@ pub fn route(r: &Req) -> Result<Out, String> {
             return j(Ok(res));
         }
         "/api/instances" => {
+            if m == "POST" && b["optimize"] == true { return j(create_instance_optimized(&r.task, s(b, "name"), s(b, "mc"), s(b, "loader"), s(b, "loader_version"))); }
             if m == "POST" { return j(create_instance(s(b, "name"), s(b, "mc"), s(b, "loader"), s(b, "loader_version"))); }
             return j(Ok(json!({"instances": list_instances()})));
         }

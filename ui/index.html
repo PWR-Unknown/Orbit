@@ -815,7 +815,7 @@ function createModal(){
     catch(err){toast(err.message,8000);createModal()}};
 }
 async function customStep(){
-  let snap=false,mc="",loader="fabric",dd,data,ed,lvMode="stable",lvPick="",lv=null,lvErr="",lvSeq=0;
+  let snap=false,mc="",loader="fabric",dd,data,ed,lvMode="stable",lvPick="",lv=null,lvErr="",lvSeq=0,opt=false,OPT=null,OPTERR="";
   const LD=["vanilla","fabric","neoforge","forge","quilt"];
   const dflt=()=>`${LOADERS[loader]} ${mc||""}`.trim();
   cshell("Create instance",`<div id="ied"></div>
@@ -823,11 +823,19 @@ async function customStep(){
   <div class="field"><label class="l">Loader</label><div class="pills" id="lp"></div></div>
   <div class="field"><label class="l">Game version</label><div id="cdd"></div><label class="tog"><input type="checkbox" id="snap"> Show snapshots and pre-releases</label><div class="note" id="vnote">Loading versions...</div></div>
   <div class="field" id="lvf"><label class="l">Loader version</label><div class="pills" id="lvp"></div><div id="lvd" style="margin-top:8px"></div><div class="note" id="lvn"></div></div>
+  <div class="field" id="optf"><label class="tog" id="optl"><input type="checkbox" id="opt"> Add Optimization</label><div class="note" id="optn"></div></div>
   <div class="note">It will be created in: <span style="user-select:all">${esc(S.settings.folder||"your instances folder")}</span></div>
   <div class="gap" style="justify-content:space-between;margin-top:20px"><button class="btn" id="cc">${ic("back","sm")}Back</button><button class="btn brand" id="ok">${ic("plus","sm")}Create instance</button></div>`);
   ed=iconEditor($("#ied"));
   $("#cc").onclick=createModal;
-  const ph=()=>{$("#cn").placeholder=dflt()};
+  const ph=()=>{$("#cn").placeholder=dflt();drawOpt()};
+  /* "Add Optimization" only works for Fabric/NeoForge on the one game version the optimization set targets (GET /optimization). Returns why it's off, or "" when usable. */
+  const optWhy=()=>{if(!OPT)return OPTERR||"Checking availability...";if(!OPT.loaders.includes(loader))return "Available for Fabric and NeoForge.";
+    const c=OPT.ceilings[loader];if(!c)return `Not available for ${LOADERS[loader]} right now.`;
+    return /^\d+(\.\d+)*$/.test(mc)&&vcmp(mc,c)<=0?"":`Available for ${LOADERS[loader]} releases up to Minecraft ${c}. Pick ${c} or older to turn it on.`};
+  function drawOpt(){const why=optWhy(),el=$("#opt");if(!el)return;if(why)opt=false;
+    el.checked=opt;el.disabled=!!why;$("#optl").style.opacity=why?".55":"";$("#optl").style.cursor=why?"default":"";
+    $("#optn").textContent=why||(opt?`Orbit will look up optimization mods on Modrinth that have a build for ${LOADERS[loader]} ${mc}, and add only those, plus what they need, after creating the instance.`:"Adds performance mods matched to this game version and loader. Anything without a build for this version is skipped.")}
   const drawLoaders=()=>{$("#lp").innerHTML=LD.map(k=>`<button type="button" class="opt2 ${k===loader?"on":""}" data-l="${k}">${k===loader?ic("check","sm"):""}${LOADERS[k]}</button>`).join("");
     $("#lp").querySelectorAll("[data-l]").forEach(b=>b.onclick=()=>{if(loader===b.dataset.l)return;loader=b.dataset.l;lvMode="stable";drawLoaders();ph();loadLV()})};
   const lvChoice=()=>!lv?"":lvMode==="latest"?lv.latest:lvMode==="other"?lvPick:lv.stable;
@@ -853,11 +861,23 @@ async function customStep(){
     dd?dd.set(mc):dd=dropdown($("#cdd"),()=>data.versions,mc,v=>{mc=v;ph();loadLV()},"Select version");ph();loadLV()};
   drawLoaders();drawLV();ph();
   $("#snap").onchange=e=>{snap=e.target.checked;ld()};
+  $("#opt").onchange=e=>{opt=e.target.checked;drawOpt()};
+  api("/optimization").then(o=>{OPT=o}).catch(e=>{OPTERR="Couldn't check availability: "+e.message}).finally(drawOpt);
   $("#cn").focus();await ld();
   $("#ok").onclick=async()=>{const b=$("#ok");b.disabled=true;
-    try{const i=await api("/instances","POST",{name:$("#cn").value.trim()||dflt(),mc,loader,loader_version:loader==="vanilla"?"":lvChoice()});
+    const name=$("#cn").value.trim()||dflt(),wantOpt=opt&&!optWhy();let wait=null,tk=null;
+    try{const body={name,mc,loader,loader_version:loader==="vanilla"?"":lvChoice()};
+      if(wantOpt){tk=addTask(name,null,"Adding optimization");body.optimize=true;body.task=tk.id;wait=toast("Creating "+name+" and adding optimization mods. This can take a minute...",900000)}
+      const i=await api("/instances","POST",body);
+      if(wait)wait.remove();
       try{const r=await ed.result();if(r&&r.set)await uploadIcon(i.id,r.set)}catch(e){toast("Instance created, but the icon couldn't be saved: "+e.message,7000)}
-      closeOver();toast("Created "+i.name);go("inst",i.id)}catch(e){toast(e.message);b.disabled=false}};
+      const o=i.optimization;
+      if(tk)endTask(tk,!!(o&&o.ok),o&&o.ok?"Optimization added":"Optimization not added");
+      closeOver();
+      if(!o)toast("Created "+i.name);
+      else if(!o.ok)toast(`Created ${i.name}, but optimization wasn't added: ${o.error||"unknown error"} You can add mods later from Discover.`,10000);
+      else toast(`Created ${i.name} with ${o.installed.length} optimization mods`+(o.skipped.length||o.warnings.length?` (${o.skipped.length} skipped${o.warnings.length?", "+o.warnings.length+" warning"+(o.warnings.length>1?"s":""):""}).`:"."),o.skipped.length||o.warnings.length?8000:4000);
+      go("inst",i.id)}catch(e){if(wait)wait.remove();if(tk)endTask(tk,false,e.message);toast(e.message,6000);b.disabled=false}};
 }
 
 /* ---------- instance page ---------- */
