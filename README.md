@@ -4,7 +4,7 @@
 
 Orbit pairs a clean Modrinth-style interface with a small native backend (WebView2 on Windows, WebKitGTK on Linux). No Electron and no bundled browser, just a compact executable that starts quickly and stays out of your way.
 
-## ✨ Features
+## Features
 
 - **Instances and modpacks:** create instances for Vanilla, Fabric, Quilt, Forge and NeoForge, and install `.mrpack` modpacks in one click.
 - **Modrinth built in:** browse, install, switch versions and check for updates. Files you add by hand are matched to Modrinth by hash.
@@ -15,6 +15,6 @@ Orbit pairs a clean Modrinth-style interface with a small native backend (WebVie
 - **Importers:** bring over instances from the Modrinth App, CurseForge and TLauncher.
 - **Wide version support:** Minecraft 1.7.10 through the latest, including automatic legacy Java for old versions.
 
-## 🛠️ Build from source
+## Build from source
 
 Requires Rust and Inno 6. See `build_windows.bat` and `build_linux.sh`.
