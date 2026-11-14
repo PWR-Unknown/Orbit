@@ -12,6 +12,7 @@ use crate::store;
 use crate::util::{agent, Res};
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 const SCOPE: &str = "XboxLive.signin offline_access";
@@ -22,6 +23,8 @@ pub struct Identity { pub name: String, pub uuid: String, pub token: String, pub
 
 static LOGIN: Mutex<Option<Value>> = Mutex::new(None);
 static FILE_LOCK: Mutex<()> = Mutex::new(());
+/// Bumped whenever a sign-in starts or is cancelled; a background poller whose number is stale stops quietly.
+static GEN: AtomicU64 = AtomicU64::new(0);
 
 fn auth_path() -> PathBuf { store::data_home().join("auth.json") }
 
@@ -40,12 +43,15 @@ fn save(v: &Value) -> Res<()> {
 
 pub fn client_id() -> String {
     store::settings().get("ms_client_id").and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("ORBIT_MS_CLIENT_ID").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())).unwrap_or_default()
+        .or_else(|| std::env::var("ORBIT_MS_CLIENT_ID").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()))
+        // a release can bake in its approved application id: ORBIT_MS_CLIENT_ID=... cargo build --release
+        .or_else(|| option_env!("ORBIT_MS_CLIENT_ID").map(|s| s.trim().to_string()).filter(|s| !s.is_empty()))
+        .unwrap_or_default()
 }
 
 /// Accounts for the UI. Never includes tokens.
 pub fn accounts() -> Vec<Value> {
-    load()["accounts"].as_array().into_iter().flatten().map(|a| json!({"id": a["id"], "name": a["name"], "uuid": a["id"], "type": "microsoft"})).collect()
+    load()["accounts"].as_array().into_iter().flatten().map(|a| json!({"id": a["id"], "name": a["name"], "uuid": a["id"], "type": "microsoft", "skin": a["skin"]})).collect()
 }
 
 pub fn remove(id: &str) -> Res<()> {
@@ -86,7 +92,7 @@ fn xerr(code: i64) -> String {
 }
 
 /// Microsoft access token -> (minecraft token, expires_in secs, profile id, profile name).
-fn minecraft_login(ms_access: &str) -> Res<(String, i64, String, String)> {
+fn minecraft_login(ms_access: &str) -> Res<(String, i64, String, String, String)> {
     let (c, xbl) = post_json("https://user.auth.xboxlive.com/user/authenticate", &json!({
         "Properties": {"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com", "RpsTicket": format!("d={ms_access}")},
         "RelyingParty": "http://auth.xboxlive.com", "TokenType": "JWT"}))?;
@@ -103,14 +109,21 @@ fn minecraft_login(ms_access: &str) -> Res<(String, i64, String, String)> {
     let (c, prof) = send(agent(30).get("https://api.minecraftservices.com/minecraft/profile").set("Authorization", &format!("Bearer {token}")).call())?;
     if c == 404 { return Err("This Microsoft account doesn't own Minecraft: Java Edition.".into()); }
     if c != 200 { return Err(format!("Couldn't load the Minecraft profile ({c}).")); }
-    Ok((token, expires, prof["id"].as_str().unwrap_or("").to_string(), prof["name"].as_str().unwrap_or("").to_string()))
+    let skin = prof["skins"].as_array().into_iter().flatten()
+        .find(|k| k["state"] == "ACTIVE").or_else(|| prof["skins"].get(0))
+        .and_then(|k| k["url"].as_str()).unwrap_or("").replace("http://", "https://");
+    Ok((token, expires, prof["id"].as_str().unwrap_or("").to_string(), prof["name"].as_str().unwrap_or("").to_string(), skin))
 }
 
-fn store_account(ms: &Value, mc: (String, i64, String, String)) -> Res<String> {
-    let (token, expires, id, name) = mc;
+fn store_account(ms: &Value, mc: (String, i64, String, String, String)) -> Res<String> {
+    let (token, expires, id, name, skin) = mc;
     let mut a = load();
-    let entry = json!({"id": id, "name": name, "refresh": ms["refresh_token"], "mc_token": token, "mc_expires": store::now() + expires as f64});
-    let list = a["accounts"].as_array_mut().unwrap_or_else(|| unreachable!());
+    if !a["accounts"].is_array() { a["accounts"] = json!([]); }
+    let list = a["accounts"].as_array_mut().ok_or("The account file is damaged.")?;
+    // a refresh response may omit a new refresh token; keep the old one rather than losing the sign-in
+    let old = list.iter().find(|x| x["id"] == id).and_then(|x| x["refresh"].as_str()).map(String::from);
+    let refresh = ms["refresh_token"].as_str().filter(|r| !r.is_empty()).map(String::from).or(old).unwrap_or_default();
+    let entry = json!({"id": id, "name": name, "refresh": refresh, "mc_token": token, "mc_expires": store::now() + expires as f64, "skin": skin});
     match list.iter_mut().find(|x| x["id"] == entry["id"]) { Some(x) => *x = entry, None => list.push(entry) }
     save(&a)?;
     Ok(id)
@@ -129,6 +142,7 @@ pub fn begin() -> Res {
         return Err("Microsoft sign-in needs an Azure application (client) ID. Register a free one at portal.azure.com (a public client, 'Personal Microsoft accounts', device-code flow enabled), have it approved for Minecraft at aka.ms/AppRegInfo, then enter it in Settings > Accounts.".into());
     }
     if status()["state"] == "pending" { return Ok(status()); }
+    let gen = GEN.fetch_add(1, Ordering::SeqCst) + 1;
     let (c, d) = post_form(DEVICE, &[("client_id", &cid), ("scope", SCOPE)])?;
     if c != 200 { return Err(d["error_description"].as_str().map(|s| s.lines().next().unwrap_or(s).to_string()).unwrap_or_else(|| format!("Microsoft refused the request ({c})."))); }
     let info = json!({"state": "pending", "user_code": d["user_code"], "verification_uri": d["verification_uri"], "message": d["message"], "expires_in": d["expires_in"]});
@@ -137,18 +151,22 @@ pub fn begin() -> Res {
     let interval = d["interval"].as_u64().unwrap_or(5).max(2);
     let expires = d["expires_in"].as_u64().unwrap_or(900);
     std::thread::spawn(move || {
-        let fail = |m: String| set_login(json!({"state": "error", "error": m}));
+        let live = || GEN.load(Ordering::SeqCst) == gen;
+        let fail = |m: String| { if live() { set_login(json!({"state": "error", "error": m})); } };
         let start = std::time::Instant::now();
         let mut wait = interval;
         loop {
             std::thread::sleep(std::time::Duration::from_secs(wait));
+            if !live() { return; }
             if start.elapsed().as_secs() > expires { return fail("The sign-in code expired. Start again.".into()); }
             let r = post_form(TOKEN, &[("grant_type", "urn:ietf:params:oauth:grant-type:device_code"), ("client_id", &cid), ("device_code", &device_code)]);
             let (code, body) = match r { Ok(x) => x, Err(e) => return fail(e) };
+            if !live() { return; }
             if code == 200 {
                 let res = minecraft_login(body["access_token"].as_str().unwrap_or("")).and_then(|mc| { let name = mc.3.clone(); store_account(&body, mc).map(|id| (id, name)) });
                 return match res {
                     Ok((id, name)) => {
+                        if !live() { return; }
                         let mut s = store::settings();
                         s.insert("ms_active".into(), json!(id));
                         let _ = store::save_settings(&s);
@@ -169,7 +187,7 @@ pub fn begin() -> Res {
     Ok(info)
 }
 
-pub fn cancel() { set_login(json!({"state": "idle"})); }
+pub fn cancel() { GEN.fetch_add(1, Ordering::SeqCst); set_login(json!({"state": "idle"})); }
 
 // ---------- identity at launch ----------
 
@@ -199,4 +217,33 @@ pub fn identity(settings: &Map<String, Value>) -> Res<Identity> {
     };
     let _ = a;
     Ok(Identity { name, uuid: id, token, xuid: "0".into(), user_type: "msa".into() })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xbox_errors_are_explained() {
+        assert!(xerr(2148916233).contains("no Xbox profile"));
+        assert!(xerr(2148916238).contains("child account"));
+        assert!(xerr(1).contains("error 1"));
+    }
+
+    #[test]
+    fn offline_identity_defaults() {
+        let i = offline_identity("");
+        assert_eq!(i.name, "Player");
+        assert_eq!(i.user_type, "legacy");
+        let i = offline_identity("Steve");
+        assert_eq!(i.token, "0");
+    }
+
+    #[test]
+    fn cancel_invalidates_a_running_sign_in() {
+        let before = GEN.load(Ordering::SeqCst);
+        cancel();
+        assert!(GEN.load(Ordering::SeqCst) > before);
+        assert_eq!(status()["state"], "idle");
+    }
 }

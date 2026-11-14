@@ -57,16 +57,47 @@ fn jload(v: &Value, default: Value) -> Value {
 
 fn s_of(v: &Value) -> String { v.as_str().map(String::from).unwrap_or_else(|| if v.is_null() { String::new() } else { v.to_string() }) }
 
+/// Maps the many spellings launchers use ("NeoForge", "neo_forge", "fabric-loader", ...) to Orbit's loader names.
+fn norm_loader(l: &str) -> String {
+    let l = l.trim().to_lowercase().replace(['_', '-', ' '], "");
+    let out = match l.as_str() {
+        "neoforge" | "neoforged" => "neoforge",
+        "forge" | "minecraftforge" | "legacyforge" => "forge",
+        "fabric" | "fabricloader" => "fabric",
+        "quilt" | "quiltloader" => "quilt",
+        o => o,
+    };
+    out.to_string()
+}
+
 fn cand(id: &str, name: &str, mc: &str, loader: &str, lv: &str, folder: Option<&Path>, extra: Value) -> Value {
-    let loader = loader.to_lowercase();
+    let mut loader = norm_loader(loader);
+    let mut mc = mc.to_string();
+    let mut lv = lv.to_string();
+    let mut guessed = false;
+    // Modrinth stores instances made by hand (or whose modpack info was lost) as "vanilla" even when they hold mods.
+    // If the folder has mods, work the loader (and a missing Minecraft version) out from the jar files instead.
+    if let Some(f) = folder {
+        let has_mods = tl::count_content(f).get("mods").and_then(|v| v.as_i64()).unwrap_or(0) > 0;
+        if has_mods && (!is_loader(&loader) || mc.is_empty()) {
+            let (imc, iloader) = infer(f);
+            if !is_loader(&loader) && is_loader(&iloader) { loader = iloader; lv.clear(); guessed = true; }
+            if mc.is_empty() && !imc.is_empty() { mc = imc; guessed = true; }
+        }
+    }
+    let (mc, lv) = (mc.as_str(), lv.as_str());
     let bad = if !is_loader(&loader) {
-        if loader.is_empty() || loader == "vanilla" { "Vanilla instances aren't supported yet.".to_string() } else { format!("The {loader} loader isn't supported.") }
+        if loader.is_empty() || loader == "vanilla" {
+            if folder.map(|f| tl::count_content(f).get("mods").is_some()).unwrap_or(false) { "Mods were found, but their loader couldn't be worked out.".to_string() }
+            else { "Vanilla instances aren't supported yet.".to_string() }
+        } else { format!("The {loader} loader isn't supported.") }
     } else if mc.is_empty() { "No Minecraft version found.".to_string() } else { String::new() };
     let counts = folder.map(tl::count_content).unwrap_or_default();
     let total: i64 = counts.values().filter_map(|v| v.as_i64()).sum();
     let mut c = json!({"id": id, "name": if name.is_empty() { id } else { name }, "mc": mc, "loader": loader, "loader_version": lv,
         "folder": folder.map(|f| f.to_string_lossy().into_owned()).unwrap_or_default(), "counts": counts, "groups": [], "icon": null,
         "created": 0, "last_played": 0, "played": 0, "settings": {"memory": 0, "jvm_args": "", "java_path": ""}, "titles": {}, "unsupported": bad, "total": total});
+    if guessed && bad.is_empty() { c["guessed"] = json!(true); }
     if let Some(o) = extra.as_object() { for (k, v) in o { c[k] = v.clone(); } }
     c
 }

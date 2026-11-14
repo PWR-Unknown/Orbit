@@ -602,7 +602,8 @@ fn summary(root: &Path) -> Value {
     let icon = std::fs::metadata(root.join(ICON_NAME)).and_then(|m| m.modified()).ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs().to_string()).unwrap_or_default();
     let (ar_on, ar_at, ar_cd) = auto_restart_cfg(&cfg);
-    let ar = json!({"enabled": ar_on, "time": format!("{:02}:{:02}", ar_at / 60, ar_at % 60), "countdown": ar_cd});
+    let times: Vec<String> = ar_at.iter().map(|t| format!("{:02}:{:02}", t / 60, t % 60)).collect();
+    let ar = json!({"enabled": ar_on, "time": times[0], "times": times, "countdown": ar_cd});
     json!({"name": name, "icon": icon, "auto_restart": ar, "egg": egg, "egg_name": info.name, "mc": if info.proxy { String::new() } else { guess_mc(root, &cfg) },
            "loader_version": s(&cfg, "loader_version"), "content": kind, "count": count, "ram": ram, "ram_default": ram.is_none(),
            "port": port, "motd": props.get("motd").and_then(|v| v.as_str()).unwrap_or(""),
@@ -947,10 +948,23 @@ pub fn update_config(name: &str, b: &Value) -> Res {
     if let Some(a) = b.get("auto_restart").filter(|a| a.is_object()) {
         let mut cur = if cfg["auto_restart"].is_object() { cfg["auto_restart"].clone() } else { json!({}) };
         if let Some(e) = a["enabled"].as_bool() { cur["enabled"] = json!(e); }
-        if a.get("time").is_some() {
+        if let Some(list) = a.get("times").and_then(|t| t.as_array()) {
+            let mut out: Vec<String> = vec![];
+            for t in list {
+                let t = t.as_str().unwrap_or("").trim();
+                if parse_hhmm(t).is_none() { return err("Restart times should look like 04:30."); }
+                if !out.iter().any(|x| x == t) { out.push(t.to_string()); }
+            }
+            if out.is_empty() { return err("Add at least one restart time."); }
+            if out.len() > 24 { return err("That's too many restart times (24 at most)."); }
+            out.sort();
+            cur["times"] = json!(out);
+            cur["time"] = json!(out[0]);
+        } else if a.get("time").is_some() {
             let t = s(a, "time").trim();
             if parse_hhmm(t).is_none() { return err("The restart time should look like 04:30."); }
             cur["time"] = json!(t);
+            cur["times"] = json!([t]);
         }
         if a.get("countdown").is_some() {
             let c = num(&a["countdown"]).ok_or("The countdown must be a number of seconds.")?;
@@ -973,10 +987,13 @@ fn parse_hhmm(t: &str) -> Option<i64> {
     if t.len() == 5 && (0..24).contains(&h) && (0..60).contains(&m) { Some(h * 60 + m) } else { None }
 }
 
-/// (enabled, minute of the day, countdown seconds) from a server's config. Off by default; 04:00 and 60 s when unset.
-fn auto_restart_cfg(cfg: &Value) -> (bool, i64, i64) {
+/// (enabled, minutes of the day (sorted, at least one), countdown seconds) from a server's config. Off by default;
+/// 04:00 and 60 s when unset. Reads `times` (a list) and falls back to the older single `time`.
+fn auto_restart_cfg(cfg: &Value) -> (bool, Vec<i64>, i64) {
     let a = &cfg["auto_restart"];
-    let at = a["time"].as_str().and_then(parse_hhmm).unwrap_or(4 * 60);
+    let mut at: Vec<i64> = a["times"].as_array().into_iter().flatten().filter_map(|t| t.as_str().and_then(parse_hhmm)).collect();
+    if at.is_empty() { at.push(a["time"].as_str().and_then(parse_hhmm).unwrap_or(4 * 60)); }
+    at.sort(); at.dedup();
     (a["enabled"].as_bool().unwrap_or(false), at, a["countdown"].as_i64().unwrap_or(60).clamp(0, 600))
 }
 
@@ -1046,11 +1063,12 @@ pub fn start_scheduler() {
             if name.starts_with('.') || !root.is_dir() { continue; }
             let (on, at, countdown) = auto_restart_cfg(&read_cfg(&root));
             if !on { continue; }
-            // the countdown starts `countdown` seconds before the chosen time, so the restart itself happens on time
-            let trigger = (at * 60 - countdown).rem_euclid(86400);
-            let late = (sod - trigger).rem_euclid(86400);
-            if late >= 30 { continue; }
-            let key = local - late;
+            // the countdown starts `countdown` seconds before each chosen time, so the restart itself happens on time
+            let Some((late, at_min)) = at.iter().map(|t| {
+                let trigger = (t * 60 - countdown).rem_euclid(86400);
+                ((sod - trigger).rem_euclid(86400), *t)
+            }).filter(|(late, _)| *late < 30).min() else { continue };
+            let key = (local - late) * 2000 + at_min;   // one firing per day and per chosen time
             {
                 let mut g = AR_FIRED.lock().unwrap_or_else(|e| e.into_inner());
                 let m = g.get_or_insert_with(HashMap::new);
@@ -1789,7 +1807,8 @@ mod tests {
 
     #[test]
     fn auto_restart_defaults_and_clamping() {
-        assert_eq!(auto_restart_cfg(&json!({})), (false, 240, 60));
-        assert_eq!(auto_restart_cfg(&json!({"auto_restart": {"enabled": true, "time": "03:15", "countdown": 9999}})), (true, 195, 600));
+        assert_eq!(auto_restart_cfg(&json!({})), (false, vec![240], 60));
+        assert_eq!(auto_restart_cfg(&json!({"auto_restart": {"enabled": true, "time": "03:15", "countdown": 9999}})), (true, vec![195], 600));
+        assert_eq!(auto_restart_cfg(&json!({"auto_restart": {"enabled": true, "times": ["16:00", "04:00", "04:00"]}})), (true, vec![240, 960], 60));
     }
 }

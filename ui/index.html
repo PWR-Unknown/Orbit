@@ -525,7 +525,7 @@ function askName(add){return new Promise(res=>{
   const ok=async()=>{try{S.settings=await api("/settings","POST",add?{add_account:$("#un").value}:{username:$("#un").value});if(!$("#un").value.trim())throw new Error("Enter a name first.");closeOver();res(true)}catch(e){toast(e.message,5000)}};
   $("#uo").onclick=ok;$("#un").onkeydown=e=>{if(e.key==="Enter")ok()}})}
 async function play(id,opts={}){
-  if(!S.settings.username&&!await askName())return;
+  if(!S.settings.username&&!S.settings.ms_active&&!await askName())return;
   try{S.run[id]=await api(`/instances/${id}/play`,"POST",opts);updateRunUI();pollRun()}catch(e){toast(e.message,9000)}
 }
 async function stopGame(id){try{await api(`/instances/${id}/stop`,"POST",{})}catch(e){toast(e.message)}pollRun()}
@@ -571,10 +571,51 @@ const STEVE=pixSvg("steve");
 const face=(n=38,name)=>{const nm=name==null?(S.settings||{}).username:name,a=((S.settings||{}).avatars||{})[nm],low=String(nm||"").toLowerCase(),
   k=a&&a.startsWith("preset:")?a.slice(7):!a&&PIX[low]?low:null;
   return`<span class="av" style="width:${n}px;height:${n}px">${k?pixSvg(k):a?`<img src="${esc(a)}" alt="">`:STEVE}</span>`};
-function accountCard(){const n=S.settings.username,L=S.settings.accounts||[];
-  return`<div class="acc"><div class="t">Playing as</div><div class="accbox ${S.accOpen?"open":""}"><button class="accbtn" id="acc">${face()}<div class="grow"><b style="color:var(--head)">${esc(n||"No account")}</b><div class="meta">Minecraft account</div></div>${ic(S.accOpen?"up":"chev","sm")}</button>
-  ${S.accOpen?`<div class="acclist">${L.map(x=>`<div class="accrow" data-an="${esc(x)}"><span class="rad ${x===n?"on":""}"></span>${face(30,x)}<b class="grow">${esc(x)}</b><button class="ib" data-ao="${esc(x)}" aria-label="Options for ${esc(x)}" title="Options">${ic("dots","sm")}</button><button class="ib" data-ad="${esc(x)}" aria-label="Remove ${esc(x)}">${ic("trash","sm")}</button></div>`).join("")}<button class="accadd" id="aadd">${ic("plus","sm")}Add account</button></div>`:""}</div>
-  <div class="note">Offline players work in singleplayer and on servers in offline mode.</div></div>`}
+const msAcc=()=>(S.settings.ms_accounts||[]).find(a=>a.id===S.settings.ms_active)||null;
+const msFace=(a,n=38)=>{const u=a&&a.skin?esc(a.skin):"";if(!u)return`<span class="av" style="width:${n}px;height:${n}px">${STEVE}</span>`;
+  const l=x=>`position:absolute;inset:0;background:url('${u}') ${x}% 14.2857%/800% 800%;image-rendering:pixelated`;
+  return`<span class="av" style="width:${n}px;height:${n}px;position:relative;overflow:hidden"><span style="${l(14.2857)}"></span><span style="${l(71.4286)}"></span></span>`};
+function accountCard(){const st=S.settings,ma=msAcc(),n=ma?ma.name:st.username,L=st.accounts||[],M=st.ms_accounts||[];
+  return`<div class="acc"><div class="t">Playing as</div><div class="accbox ${S.accOpen?"open":""}"><button class="accbtn" id="acc">${ma?msFace(ma):face()}<div class="grow"><b style="color:var(--head)">${esc(n||"No account")}</b><div class="meta">${ma?"Microsoft account":"Offline player"}</div></div>${ic(S.accOpen?"up":"chev","sm")}</button>
+  ${S.accOpen?`<div class="acclist">${M.map(x=>`<div class="accrow" data-mid="${esc(x.id)}"><span class="rad ${x.id===st.ms_active?"on":""}"></span>${msFace(x,30)}<span class="grow"><b>${esc(x.name)}</b><span class="meta" style="display:block">Microsoft</span></span><button class="ib" data-mo="${esc(x.id)}" aria-label="Sign out ${esc(x.name)}" title="Sign out">${ic("trash","sm")}</button></div>`).join("")}${L.map(x=>`<div class="accrow" data-an="${esc(x)}"><span class="rad ${!st.ms_active&&x===st.username?"on":""}"></span>${face(30,x)}<span class="grow"><b>${esc(x)}</b><span class="meta" style="display:block">Offline</span></span><button class="ib" data-ao="${esc(x)}" aria-label="Options for ${esc(x)}" title="Options">${ic("dots","sm")}</button><button class="ib" data-ad="${esc(x)}" aria-label="Remove ${esc(x)}">${ic("trash","sm")}</button></div>`).join("")}<button class="accadd" id="aadd">${ic("plus","sm")}Add account</button></div>`:""}</div>
+  <div class="note">${ma?"Signed in with Microsoft: works on online-mode servers, with your skin and cape.":"Offline players work in singleplayer and on servers in offline mode."}</div></div>`}
+
+/* ---------- Microsoft sign-in (device code) ---------- */
+let msPoll=null;
+const msStop=()=>{if(msPoll){clearInterval(msPoll);msPoll=null}};
+function msSignIn(done){
+  const draw=h=>{openOver(`<div class="modal-bg"><div class="modal"><div class="row c"><h2 class="grow" style="margin:0">Sign in with Microsoft</h2><button class="xb" id="mx" aria-label="Close">${ic("x")}</button></div><div id="mb" style="margin-top:12px">${h}</div></div></div>`);
+    $("#mx").onclick=async()=>{msStop();try{await api("/auth/cancel","POST",{})}catch(e){}closeOver()}};
+  const needId=()=>{draw(`<div class="note" style="margin:0 0 10px">Microsoft requires every launcher to use its own app registration that Mojang has approved. Create a free one, then paste its <b>Application (client) ID</b> here. You only do this once.</div>
+    <ol style="padding-left:20px;line-height:1.7;margin:0 0 12px"><li>Open <a href="#" id="ma1">portal.azure.com &rarr; App registrations</a> and choose <b>New registration</b>.</li><li>Supported account types: <b>Personal Microsoft accounts only</b>.</li><li>Under <b>Authentication</b>, turn on <b>Allow public client flows</b>.</li><li>Ask Mojang to approve the app at <a href="#" id="ma2">aka.ms/AppRegInfo</a>.</li></ol>
+    <input type="text" id="mcid" placeholder="00000000-0000-0000-0000-000000000000" spellcheck="false"><div class="gap" style="justify-content:flex-end;margin-top:16px"><button class="btn brand" id="mgo">Save and continue</button></div>`);
+    $("#ma1").onclick=e=>{e.preventDefault();openUrl("https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade")};
+    $("#ma2").onclick=e=>{e.preventDefault();openUrl("https://aka.ms/AppRegInfo")};
+    const go=async()=>{try{S.settings=await api("/settings","POST",{ms_client_id:$("#mcid").value});if(!S.settings.ms_client_id)throw new Error("Paste the application ID first.");start()}catch(e){toast(e.message,6000)}};
+    $("#mgo").onclick=go;$("#mcid").onkeydown=e=>{if(e.key==="Enter")go()};$("#mcid").focus()};
+  const fail=m=>{msStop();draw(`<div class="note" style="color:var(--red);margin:0 0 14px">${esc(m)}</div><div class="gap" style="justify-content:flex-end"><button class="btn" id="mcl">Close</button><button class="btn brand" id="mre">Try again</button></div>`);
+    $("#mcl").onclick=closeOver;$("#mre").onclick=start};
+  const start=async()=>{
+    if(!S.settings.ms_client_id){needId();return}
+    draw(`<div class="row c gap"><span class="spin"></span>Contacting Microsoft...</div>`);
+    let r;try{r=await api("/auth/begin","POST",{})}catch(e){fail(e.message);return}
+    const uri=r.verification_uri||"https://www.microsoft.com/link";
+    draw(`<div class="note" style="margin:0 0 10px">Open the Microsoft page and enter this code:</div>
+      <div style="font-size:30px;font-weight:700;letter-spacing:4px;text-align:center;padding:14px;border-radius:10px;background:var(--bg2,rgba(127,127,127,.12));user-select:all" id="mcode">${esc(r.user_code||"")}</div>
+      <div class="gap" style="justify-content:center;margin-top:14px"><button class="btn" id="mcp">Copy code</button><button class="btn brand" id="mop">Open ${esc(uri.replace(/^https?:\/\//,""))}</button></div>
+      <div class="row c gap meta" style="margin-top:14px;justify-content:center"><span class="spin"></span>Waiting for you to finish signing in...</div>`);
+    $("#mop").onclick=()=>openUrl(uri);$("#mcp").onclick=()=>{try{navigator.clipboard.writeText(r.user_code);toast("Code copied",1500)}catch(e){}};
+    openUrl(uri);msStop();
+    msPoll=setInterval(async()=>{let st;try{st=await api("/auth/status")}catch(e){return}
+      if(st.state==="done"){msStop();try{S.settings=await api("/settings")}catch(e){}closeOver();toast("Signed in as "+st.name,3000);done&&done()}
+      else if(st.state==="error")fail(st.error||"Sign-in failed.");
+      else if(st.state==="idle"&&msPoll){msStop();closeOver()}},2000)};
+  start()}
+function addAccountModal(done){
+  openOver(`<div class="modal-bg"><div class="modal"><div class="row c"><h2 class="grow" style="margin:0">Add an account</h2><button class="xb" id="ax" aria-label="Close">${ic("x")}</button></div>
+  <div style="display:grid;gap:10px;margin-top:14px"><button class="btn brand" id="ams" style="justify-content:center">Sign in with Microsoft</button><div class="note" style="margin:0">Official Minecraft account. Needed for online-mode servers and your own skin.</div>
+  <button class="btn" id="aof" style="justify-content:center">Add an offline player</button><div class="note" style="margin:0">Just a name. Works in singleplayer and on offline-mode servers.</div></div></div></div>`);
+  $("#ax").onclick=closeOver;$("#ams").onclick=()=>{closeOver();msSignIn(done)};$("#aof").onclick=async()=>{closeOver();if(await askName(true))done&&done()}}
 const blobURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read the picture."));r.readAsDataURL(b)});
 async function saveAvatar(name,blob){const small=await fileBlob(blob,128);S.settings=await api("/settings","POST",{avatar_set:name,avatar_data:await blobURL(small)})}
 function pickAvatar(name,done){const f=document.createElement("input");f.type="file";f.accept="image/*";
@@ -595,11 +636,13 @@ function bindAcc(m){
   const a=m.querySelector("#acc");if(!a)return;
   const redraw=()=>{const h=m.querySelector(".acc");if(h){h.outerHTML=accountCard();bindAcc(m)}};
   a.onclick=()=>{S.accOpen=!S.accOpen;redraw()};
-  m.querySelectorAll("[data-an]").forEach(r=>r.onclick=async e=>{if(e.target.closest("[data-ad],[data-ao]"))return;try{S.settings=await api("/settings","POST",{username:r.dataset.an});redraw()}catch(x){toast(x.message)}});
+  m.querySelectorAll("[data-an]").forEach(r=>r.onclick=async e=>{if(e.target.closest("[data-ad],[data-ao]"))return;try{S.settings=await api("/settings","POST",{username:r.dataset.an,ms_active:""});redraw()}catch(x){toast(x.message)}});
+  m.querySelectorAll("[data-mid]").forEach(r=>r.onclick=async e=>{if(e.target.closest("[data-mo]"))return;try{S.settings=await api("/settings","POST",{ms_active:r.dataset.mid});redraw()}catch(x){toast(x.message)}});
+  m.querySelectorAll("[data-mo]").forEach(b=>b.onclick=async()=>{if(!confirm("Sign this Microsoft account out of Orbit?"))return;try{S.settings=await api("/settings","POST",{ms_remove:b.dataset.mo});redraw()}catch(x){toast(x.message)}});
   m.querySelectorAll("[data-ad]").forEach(b=>b.onclick=async()=>{if(!confirm(`Remove ${b.dataset.ad}?`))return;try{S.settings=await api("/settings","POST",{remove_account:b.dataset.ad});redraw()}catch(x){toast(x.message)}});
   m.querySelectorAll("[data-ao]").forEach(b=>b.onclick=e=>{e.stopPropagation();const n=b.dataset.ao,has=!!((S.settings.avatars||{})[n]);
     popMenu(b,[["Choose or customize picture...","brush",0,()=>avatarModal(n,redraw)],["Upload picture...","upload",0,()=>pickAvatar(n,redraw)],...(has?[["Remove picture","trash",1,async()=>{try{S.settings=await api("/settings","POST",{avatar_reset:n});redraw()}catch(x){toast(x.message)}}]]:[])])});
-  const ad=m.querySelector("#aadd");if(ad)ad.onclick=async()=>{if(await askName(true))redraw()};
+  const ad=m.querySelector("#aadd");if(ad)ad.onclick=()=>addAccountModal(redraw);
 }
 
 /* ---------- home (jump in + library) ---------- */
@@ -1479,23 +1522,28 @@ async function svProps(box,d){
 /* settings */
 const AR_CD=[[0,"No countdown"],[30,"30 seconds"],[60,"1 minute"],[120,"2 minutes"],[300,"5 minutes"],[600,"10 minutes"]];
 function svSettings(box,d){
-  const ram=d.ram||S.sv.ram,ar=d.auto_restart||{enabled:false,time:"04:00",countdown:60};let arOn=!!ar.enabled;
+  const ram=d.ram||S.sv.ram,ar=d.auto_restart||{enabled:false,time:"04:00",countdown:60};let arOn=!!ar.enabled;let arTimes=(ar.times&&ar.times.length?ar.times:[ar.time||"04:00"]).slice();
   box.innerHTML=`<div class="card" style="max-width:640px"><div class="field" style="margin-top:0"><label class="l">Memory (RAM)</label>${ramField("sr",ram,d.ram?0:S.sv.ram)}${d.status.running?'<div class="note">Restart the server for a new RAM value to apply.</div>':""}</div>
   <div class="field"><label class="l" for="sp">Port</label><input type="number" id="sp" min="1024" max="65535" value="${d.port}"></div>
   ${d.proxy?"":`<div class="field"><label class="l" for="smc">Minecraft version</label><input type="text" id="smc" value="${esc(d.mc)}" placeholder="e.g. 1.21.1"><div class="note">Used to pick compatible mods and plugins. Orbit fills this in for servers it creates.</div></div>`}
   <div class="field"><label class="l" for="sj">Java path <span class="meta">(optional)</span></label><input type="text" id="sj" value="${esc(d.java)}" placeholder="Leave empty to use the right Java for this version automatically"></div>
   <div class="field"><label class="l" for="sjv">Extra JVM flags <span class="meta">(optional)</span></label><input type="text" id="sjv" value="${esc(d.jvm)}" placeholder="e.g. -XX:+UseG1GC"></div>
   <div class="field"><label class="l">Daily restart</label>
-    <div class="tgl" id="sar" role="switch" tabindex="0" aria-checked="${arOn}">Restart every day<span class="sw ${arOn?"on":""}"></span></div>
-    <div class="row c gap" style="margin-top:10px;flex-wrap:wrap"><div><label class="l" for="art">Restart at</label><input type="time" id="art" value="${esc(ar.time)}" ${arOn?"":"disabled"}></div>
+    <div class="tgl" id="sar" role="switch" tabindex="0" aria-checked="${arOn}">Restart every day at the times below<span class="sw ${arOn?"on":""}"></span></div>
+    <div class="row c gap" style="margin-top:10px;flex-wrap:wrap"><div><label class="l">Restart at</label><div id="artl" class="row c gap" style="flex-wrap:wrap"></div></div>
     <div><label class="l" for="arc">Warn players</label><select class="sel" id="arc" ${arOn?"":"disabled"}>${AR_CD.map(([v,l])=>`<option value="${v}" ${+ar.countdown===v?"selected":""}>${l} before</option>`).join("")}</select></div></div>
     <div class="note">${d.proxy?"Proxies get no chat countdown; the restart still happens. ":"Players see a countdown in chat (/say) before the restart. "}Uses this computer's clock and only restarts a server that is running; Orbit must be open.</div></div>
   <div class="gap"><button class="btn brand" id="ssv">Save settings</button><button class="btn" id="sfo">${ic("folder","sm")}Open folder</button></div></div>
   <div class="danger-zone" style="max-width:640px"><h2 style="color:var(--red)">Delete server</h2><div class="note" style="margin:0 0 12px">Permanently removes ${esc(d.name)} with its worlds, configs and files.</div><button class="btn danger" id="sdl">${ic("trash","sm")}Delete this server</button></div>`;
   bindRam("sr");$("#sdl").onclick=delServer;$("#sfo").onclick=()=>sapi(d.name,"/open","POST",{}).catch(e=>toast(e.message));
-  const arT=()=>{arOn=!arOn;$("#sar").setAttribute("aria-checked",arOn);$("#sar").querySelector(".sw").classList.toggle("on",arOn);$("#art").disabled=$("#arc").disabled=!arOn};
+  const arRender=()=>{const l=$("#artl");l.innerHTML=arTimes.map((t,i)=>`<span class="row c" style="gap:4px"><input type="time" data-i="${i}" value="${esc(t)}" ${arOn?"":"disabled"}>${arTimes.length>1?`<button class="ib" data-rm="${i}" aria-label="Remove time" title="Remove" ${arOn?"":"disabled"}>${ic("trash","sm")}</button>`:""}</span>`).join("")+`<button class="btn" id="aradd" ${arOn&&arTimes.length<24?"":"disabled"}>+ Add time</button>`;
+    l.querySelectorAll("input[type=time]").forEach(e=>e.onchange=()=>{arTimes[+e.dataset.i]=e.value||"04:00"});
+    l.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{arTimes.splice(+b.dataset.rm,1);arRender()});
+    $("#aradd").onclick=()=>{const last=arTimes[arTimes.length-1]||"04:00",[h,m]=last.split(":").map(Number);arTimes.push(String((h+6)%24).padStart(2,"0")+":"+String(m).padStart(2,"0"));arRender()}};
+  arRender();
+  const arT=()=>{arOn=!arOn;$("#sar").setAttribute("aria-checked",arOn);$("#sar").querySelector(".sw").classList.toggle("on",arOn);arRender();$("#arc").disabled=!arOn};
   $("#sar").onclick=arT;$("#sar").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();arT()}};
-  $("#ssv").onclick=async()=>{const b={ram:$("#sr").value,port:$("#sp").value,java:$("#sj").value,jvm:$("#sjv").value,auto_restart:{enabled:arOn,time:$("#art").value||"04:00",countdown:+$("#arc").value}};if($("#smc"))b.mc=$("#smc").value;
+  $("#ssv").onclick=async()=>{const b={ram:$("#sr").value,port:$("#sp").value,java:$("#sj").value,jvm:$("#sjv").value,auto_restart:{enabled:arOn,times:arTimes.map(t=>t||"04:00"),countdown:+$("#arc").value}};if($("#smc"))b.mc=$("#smc").value;
     try{S.sd=await sapi(d.name,"/config","POST",b);S.sv.loaded=false;toast("Saved");rSrv($("#main"))}catch(e){toast(e.message,5000)}};
 }
 
@@ -1702,12 +1750,12 @@ function drawFilters(){
 
 /* ---------- settings (modal, like the Modrinth app) ---------- */
 function settingsModal(sec="appearance"){
-  const nav=[["DISPLAY",[["appearance","Appearance","brush"]]],["INSTANCES",[["storage","Storage","folder"],["launch","Launch","play"]]],["INTEGRATIONS",[["curseforge","CurseForge key","key"],["tlauncher","TLauncher","box"],["import","Import folders","folder"]]],["ABOUT",[["about","About Orbit","info"]]]];
+  const nav=[["DISPLAY",[["appearance","Appearance","brush"]]],["INSTANCES",[["storage","Storage","folder"],["launch","Launch","play"]]],["INTEGRATIONS",[["accounts","Microsoft account","key"],["curseforge","CurseForge key","key"],["tlauncher","TLauncher","box"],["import","Import folders","folder"]]],["ABOUT",[["about","About Orbit","info"]]]];
   openOver(`<div class="modal-bg"><div class="smodal" role="dialog" aria-label="Settings"><div class="shead"><h2>Settings</h2><button class="xb" id="sx" aria-label="Close">${ic("x")}</button></div>
   <div class="sbody"><div class="snav">${nav.map(([h,items])=>`<h4>${h}</h4>`+items.map(([k,t,i])=>`<button data-sec="${k}" class="${k===sec?"on":""}">${ic(i,"sm")}${t}</button>`).join("")).join("")}</div><div class="spane" id="sp"></div></div></div></div>`);
   $("#sx").onclick=closeOver;
   ov().querySelectorAll("[data-sec]").forEach(b=>b.onclick=()=>settingsModal(b.dataset.sec));
-  api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,curseforge:pCF,tlauncher:pTL,import:pImport,about:pAbout})[sec]($("#sp"))});
+  api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,accounts:pAccounts,curseforge:pCF,tlauncher:pTL,import:pImport,about:pAbout})[sec]($("#sp"))});
 }
 const AC=[["Orbit green",""],["Blue","#4c8dff"],["Purple","#a56bff"],["Pink","#ff5fa2"],["Orange","#ff9a3c"],["Red","#ff496e"],["Teal","#2ad4c9"]];
 function pAppearance(p){
@@ -1725,6 +1773,20 @@ function pAppearance(p){
   const setAcc=async hex=>{S.settings.accent=hex;applyAccent(hex);try{S.settings=await api("/settings","POST",{accent:hex})}catch(e){toast(e.message,4000)}pAppearance(p)};
   p.querySelectorAll("[data-ac]").forEach(b=>b.onclick=()=>setAcc(b.dataset.ac));
   $("#acc").oninput=e=>applyAccent(e.target.value);$("#acc").onchange=e=>setAcc(e.target.value);
+}
+function pAccounts(p){
+  const st=S.settings,M=st.ms_accounts||[];
+  p.innerHTML=`<h3>Microsoft account</h3><div class="d">Sign in with your official Minecraft account to play on online-mode servers with your own skin and cape. Orbit keeps the sign-in on this computer only.</div>
+  ${M.length?M.map(x=>`<div class="accrow" style="cursor:default;margin-bottom:6px">${msFace(x,34)}<span class="grow"><b>${esc(x.name)}</b><span class="meta" style="display:block">${x.id===st.ms_active?"Active account":"Signed in"}</span></span>${x.id===st.ms_active?"":`<button class="btn" data-use="${esc(x.id)}">Use this</button>`}<button class="btn" data-out="${esc(x.id)}">Sign out</button></div>`).join(""):'<div class="note">No Microsoft account is signed in.</div>'}
+  <div class="gap" style="margin-top:12px"><button class="btn brand" id="msin">${ic("plus","sm")}Sign in with Microsoft</button>${st.ms_active?'<button class="btn" id="msoff">Play offline instead</button>':""}</div>
+  <h3 style="margin-top:24px">Application ID</h3><div class="d">Microsoft only lets launchers with an approved app registration sign players in. Paste yours here (see the sign-in dialog for how to get one).</div>
+  <input type="text" id="mcid2" value="${esc(st.ms_client_id||"")}" placeholder="00000000-0000-0000-0000-000000000000" spellcheck="false"><div class="gap" style="margin-top:10px"><button class="btn" id="mcs">Save ID</button></div>`;
+  const redo=async()=>{try{S.settings=await api("/settings")}catch(e){}pAccounts(p)};
+  $("#msin").onclick=()=>msSignIn(redo);
+  p.querySelectorAll("[data-use]").forEach(b=>b.onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_active:b.dataset.use});pAccounts(p)}catch(e){toast(e.message,5000)}});
+  p.querySelectorAll("[data-out]").forEach(b=>b.onclick=async()=>{if(!confirm("Sign this account out of Orbit?"))return;try{S.settings=await api("/settings","POST",{ms_remove:b.dataset.out});pAccounts(p)}catch(e){toast(e.message,5000)}});
+  if($("#msoff"))$("#msoff").onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_active:""});pAccounts(p)}catch(e){toast(e.message,5000)}};
+  $("#mcs").onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_client_id:$("#mcid2").value});toast("Saved",2000)}catch(e){toast(e.message,6000)}};
 }
 function pStorage(p){
   const s=S.settings;let val=s.folder;
