@@ -30,7 +30,7 @@ pub fn not_ported(what: &str) -> Res {
     Err(format!("NOT_PORTED: {what} hasn't been ported to the Rust version yet."))
 }
 
-const THEMES: [&str; 4] = ["dark", "light", "oled", "system"];
+const THEMES: [&str; 11] = ["dark", "light", "oled", "system", "christmas-light", "christmas-dark", "halloween-light", "halloween-dark", "glitch", "synthwave", "aurora"];
 const SHOT_TYPES: [(&str, &str); 4] = [("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("webp", "image/webp")];
 const SHOT_SKIP: [&str; 14] = ["saves", "mods", "libraries", "versions", "assets", "logs", "config", "resourcepacks", "shaderpacks", "datapacks", "natives", "runtime", "crash-reports", "bin"];
 
@@ -978,7 +978,7 @@ pub fn route(r: &Req) -> Result<Out, String> {
         "/api/update/check" if m == "POST" => return j(update_check()),
         "/api/update/install" if m == "POST" => return j(update_install()),
         "/api/settings" => return j(settings(r)),
-        "/api/auth/begin" if m == "POST" => return j(auth::begin()),
+        "/api/auth/begin" if m == "POST" => return j(if auth::MS_LOGIN_DISABLED { Err("Microsoft sign-in is temporarily disabled.".into()) } else { auth::begin() }),
         "/api/auth/status" => return j(Ok(auth::status())),
         "/api/auth/cancel" if m == "POST" => { auth::cancel(); return j(Ok(json!({"ok": true}))); }
         "/api/modpack/install" if m == "POST" => return j(install_modpack(&r.task, if s(b, "source").is_empty() { "modrinth" } else { s(b, "source") }, s(b, "ident"), s(b, "mc"))),

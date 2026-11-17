@@ -6,6 +6,42 @@
 :root,html[data-theme=oled]{--bg:#000;--bar:#000;--card:#16181c;--card2:#1d1f23;--line:#26292f;--input:#16181c;--btn:#26292f;--btnh:#30333a;--chip:#26292f;--text:#b0bac5;--head:#ecf9fb;--mut:#96a2b0;--accent:#1bd96a;--on:#000;--tint:rgba(27,217,106,.15);--shadow:rgba(0,0,0,.7)}
 html[data-theme=dark]{--bg:#16181c;--bar:#16181c;--card:#26292f;--card2:#2d3037;--line:#363a41;--input:#1d1f23;--btn:#34373e;--btnh:#3f434b;--chip:#34373e;--text:#b0bac5;--head:#ecf9fb;--mut:#96a2b0;--accent:#1bd96a;--on:#0b0d10;--tint:rgba(27,217,106,.15);--shadow:rgba(0,0,0,.5)}
 html[data-theme=light]{--bg:#f5f5f5;--bar:#fff;--card:#fff;--card2:#f0f1f3;--line:#dcdfe4;--input:#fff;--btn:#e6e8eb;--btnh:#d9dce0;--chip:#e9ebee;--text:#4a5058;--head:#16181c;--mut:#626b76;--accent:#0c8f48;--on:#04130a;--tint:rgba(12,143,72,.12);--shadow:rgba(0,0,0,.18)}
+/* ---- animated themes ---- */
+html[data-theme=christmas-light]{--bg:#f7f2e9;--bar:#fffaf0;--card:#fff;--card2:#f3ece0;--line:#e0d4c0;--input:#fff;--btn:#eadfcb;--btnh:#decfb3;--chip:#efe5d3;--text:#4a3f3a;--head:#2a1512;--mut:#6b5d55;--green:#c8222d;--greenh:#dc3a44;--accent:#b3202a;--on:#fff;--tint:rgba(179,32,42,.12);--shadow:rgba(60,20,10,.2);--snow:#9fb9d6;--fx:#1f7a3d}
+html[data-theme=christmas-dark]{--bg:#0d1a14;--bar:#0f1f18;--card:#15291f;--card2:#1a3226;--line:#2a4a38;--input:#11231a;--btn:#1f3a2c;--btnh:#284a38;--chip:#1f3a2c;--text:#c9d6cc;--head:#fff6e0;--mut:#9db0a3;--green:#d6313d;--greenh:#ea4a55;--accent:#f4c95d;--on:#fff;--tint:rgba(244,201,93,.16);--shadow:rgba(0,0,0,.55);--snow:#fff;--fx:#f4c95d}
+html[data-theme=halloween-light]{--bg:#f6efe3;--bar:#fffaf2;--card:#fffaf2;--card2:#f1e7d8;--line:#d9c9e6;--input:#fff;--btn:#eadff3;--btnh:#dccdea;--chip:#eadff3;--text:#3b2a4a;--head:#1d1030;--mut:#62547a;--green:#e8650a;--greenh:#f57d26;--accent:#b34700;--on:#1a0f00;--tint:rgba(232,101,10,.14);--shadow:rgba(40,10,60,.2);--fog:rgba(120,70,160,.22);--ember:#e8650a;--flame:rgba(232,101,10,.55)}
+html[data-theme=halloween-dark]{--bg:#120a1c;--bar:#150c21;--card:#1e1230;--card2:#261840;--line:#3a2a5a;--input:#180e28;--btn:#2d1d4a;--btnh:#3a2760;--chip:#2d1d4a;--text:#cfc4e0;--head:#fff0e0;--mut:#a496bf;--green:#ff7a18;--greenh:#ff953f;--accent:#ff8a2b;--on:#1a0f00;--tint:rgba(255,122,24,.17);--shadow:rgba(0,0,0,.6);--fog:rgba(150,100,220,.2);--ember:#ff8a2b;--flame:rgba(124,255,58,.55)}
+html[data-theme=glitch]{--bg:#05060a;--bar:#07080d;--card:#0c0e16;--card2:#11141e;--line:#1f2533;--input:#090b12;--btn:#161a26;--btnh:#202636;--chip:#161a26;--text:#b8c4d0;--head:#f2fbff;--mut:#8593a3;--green:#00e5ff;--greenh:#5cf0ff;--accent:#00e5ff;--on:#001014;--tint:rgba(0,229,255,.15);--shadow:rgba(0,0,0,.7)}
+html[data-theme=synthwave]{--bg:#140a2b;--bar:#170c30;--card:#1f1140;--card2:#281650;--line:#4a2a7a;--input:#190d36;--btn:#33195f;--btnh:#432276;--chip:#33195f;--text:#d9c8f5;--head:#fff;--mut:#a898d0;--green:#ff2fb8;--greenh:#ff61cc;--accent:#ff5fd2;--on:#14061f;--tint:rgba(255,95,210,.16);--shadow:rgba(0,0,0,.6)}
+html[data-theme=aurora]{--bg:#07131a;--bar:#081720;--card:#0e2230;--card2:#132b3b;--line:#1f4256;--input:#0a1b26;--btn:#173448;--btnh:#1f4560;--chip:#173448;--text:#c3d8e0;--head:#f0fffb;--mut:#8fb0bd;--green:#2fe0a8;--greenh:#5ef2c1;--accent:#5ef2c1;--on:#02130e;--tint:rgba(94,242,193,.15);--shadow:rgba(0,0,0,.55)}
+html[data-theme$=light][data-contrast=high]{--bg:#fff;--card2:#fff;--text:#000;--head:#000;--mut:#1c1f24;--line:#4a4f58;--btn:#dfe2e6;--btnh:#cdd1d6;--chip:#dfe2e6}
+html[data-theme=christmas-light]::before,html[data-theme=christmas-dark]::before,html[data-theme=halloween-light]::before,html[data-theme=halloween-dark]::before,html[data-theme=glitch]::before,html[data-theme=synthwave]::before,html[data-theme=aurora]::before,html[data-theme=christmas-light]::after,html[data-theme=christmas-dark]::after,html[data-theme=halloween-light]::after,html[data-theme=halloween-dark]::after,html[data-theme=glitch]::after,html[data-theme=synthwave]::after,html[data-theme=aurora]::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:2}
+/* christmas: falling snow (two layers) + twinkling light string */
+html[data-theme^=christmas]::before{opacity:.6;background-image:radial-gradient(2px 2px at 20px 30px,var(--snow),transparent),radial-gradient(2px 2px at 140px 70px,var(--snow),transparent),radial-gradient(3px 3px at 90px 140px,var(--snow),transparent),radial-gradient(1.5px 1.5px at 200px 20px,var(--snow),transparent);background-size:240px 200px;animation:xsnow 14s linear infinite}
+html[data-theme^=christmas]::after{inset:0 0 auto 0;height:6px;opacity:.9;background:repeating-linear-gradient(90deg,#d6313d 0 14px,#f4c95d 14px 28px,#2e9e55 28px 42px,transparent 42px 56px);animation:xtwinkle 2.4s ease-in-out infinite alternate}
+@keyframes xsnow{to{background-position:60px 200px}}
+@keyframes xtwinkle{from{opacity:.35}to{opacity:1}}
+/* halloween: drifting fog + rising embers + flickering glow */
+html[data-theme^=halloween]::before{height:45vh;top:auto;bottom:0;opacity:.7;background:radial-gradient(ellipse 40% 60% at 20% 100%,var(--fog),transparent),radial-gradient(ellipse 45% 50% at 70% 100%,var(--fog),transparent);background-size:200% 100%;animation:xfog 30s ease-in-out infinite alternate}
+html[data-theme^=halloween]::after{opacity:.7;background-image:radial-gradient(2px 2px at 40px 180px,var(--ember),transparent),radial-gradient(1.5px 1.5px at 130px 90px,var(--ember),transparent),radial-gradient(2px 2px at 210px 150px,var(--ember),transparent);background-size:260px 220px;animation:xember 12s linear infinite}
+html[data-theme^=halloween] h1,html[data-theme^=halloween] h2,html[data-theme^=halloween] h3{animation:xflick 3.2s infinite}
+@keyframes xfog{to{background-position:100% 0}}
+@keyframes xember{to{background-position:30px -220px}}
+@keyframes xflick{0%,18%,22%,62%,100%{text-shadow:0 0 8px var(--flame)}20%,60%{text-shadow:0 0 2px var(--flame)}}
+/* glitch: scanlines + RGB-split (follows the accent colour) + micro-jitter */
+html[data-theme=glitch]::before{opacity:.5;background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);animation:xscan 9s linear infinite}
+html[data-theme=glitch]::after{opacity:.06;background:linear-gradient(transparent 45%,var(--green) 50%,transparent 55%);background-size:100% 220px;animation:xscan 6s linear infinite}
+html[data-theme=glitch] h1,html[data-theme=glitch] h2,html[data-theme=glitch] h3,html[data-theme=glitch] .snav button.on{text-shadow:-1.5px 0 var(--green),1.5px 0 #ff2d55;animation:xjit 5s steps(1) infinite}
+@keyframes xscan{to{background-position:0 220px}}
+@keyframes xjit{0%,90%,100%{transform:none}91%{transform:translate(1px,-1px)}93%{transform:translate(-2px,0)}95%{transform:translate(1px,1px)}97%{transform:translate(-1px,0)}}
+/* synthwave: sunset glow + scrolling neon grid */
+html[data-theme=synthwave]::before{opacity:.5;background:radial-gradient(ellipse 60% 35% at 50% 100%,rgba(255,47,184,.35),transparent)}
+html[data-theme=synthwave]::after{top:auto;height:38vh;opacity:.3;background:repeating-linear-gradient(0deg,#ff2fb8 0 1px,transparent 1px 40px),repeating-linear-gradient(90deg,#8a5bff 0 1px,transparent 1px 60px);-webkit-mask-image:linear-gradient(transparent,#000);mask-image:linear-gradient(transparent,#000);animation:xgrid 3s linear infinite}
+@keyframes xgrid{to{background-position:0 40px,0 0}}
+/* aurora: slow drifting colour ribbons */
+html[data-theme=aurora]::before{opacity:.35;background:radial-gradient(ellipse 50% 30% at 20% 10%,#2fe0a8,transparent),radial-gradient(ellipse 45% 30% at 70% 5%,#4aa8ff,transparent),radial-gradient(ellipse 40% 25% at 50% 20%,#a56bff,transparent);background-size:200% 100%;animation:xaur 24s ease-in-out infinite alternate}
+@keyframes xaur{to{background-position:100% 0;opacity:.2}}
+@media (prefers-reduced-motion:reduce){html[data-theme]::before,html[data-theme]::after,html[data-theme] h1,html[data-theme] h2,html[data-theme] h3,html[data-theme] .snav button.on{animation:none!important}}
 :root{--green:#1bd96a;--greenh:#3fe583;--red:#ff496e;--orange:#f16436}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:14px/1.45 Inter,"Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
@@ -374,11 +410,11 @@ const contrastOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return(Math.max(x,y)+.05)/(
 function applyAccent(hex){
   const R=document.documentElement,st=R.style,props=["--green","--greenh","--accent","--tint","--on","--onacc"];
   if(!/^#[0-9a-f]{6}$/i.test(hex||"")){props.forEach(p=>st.removeProperty(p));return}
-  const th=R.dataset.theme,hc=R.dataset.contrast==="high",need=hc?7:4.5,bg=th==="light"?"#ffffff":th==="dark"?"#26292f":"#16181c",toward=th==="light"?"#000000":"#ffffff";
+  const th=R.dataset.theme,hc=R.dataset.contrast==="high",need=hc?7:4.5,LT=/light$/.test(th),bg=LT?"#ffffff":th==="oled"?"#16181c":"#26292f",toward=LT?"#000000":"#ffffff";
   let txt=hex;for(let i=0;i<24&&contrastOf(txt,bg)<need;i++)txt=mixHex(txt,toward,.1);
   const onFill=contrastOf(hex,"#04130a")>=contrastOf(hex,"#ffffff")?"#04130a":"#ffffff",[r,g,b]=hexRGB(hex);
   st.setProperty("--green",hex);st.setProperty("--greenh",mixHex(hex,"#ffffff",.18));st.setProperty("--accent",txt);
-  st.setProperty("--tint",`rgba(${r},${g},${b},${th==="light"?.14:.18})`);st.setProperty("--on",onFill);st.setProperty("--onacc",onFill)}
+  st.setProperty("--tint",`rgba(${r},${g},${b},${LT?.14:.18})`);st.setProperty("--on",onFill);st.setProperty("--onacc",onFill)}
 mq.addEventListener&&mq.addEventListener("change",()=>{if(S.settings.theme==="system")applyTheme("system")});
 
 const S={tasks:[],tpOpen:false,pj:null,upd:{},run:{},itab:"content",fpath:"",page:"home",inst:null,instances:[],settings:{},detail:null,bt:null,filters:{},vers:{},shut:{},ls:"",cq:"",ct:"all",groups:[],lib:{sort:"name",group:"custom",loader:[],mc:[],shut:{}},
@@ -583,7 +619,9 @@ function accountCard(){const st=S.settings,ma=msAcc(),n=ma?ma.name:st.username,L
 /* ---------- Microsoft sign-in (device code) ---------- */
 let msPoll=null;
 const msStop=()=>{if(msPoll){clearInterval(msPoll);msPoll=null}};
+const MS_DISABLED=true; /* Microsoft sign-in: temporarily disabled (set false to re-enable) */
 function msSignIn(done){
+  if(MS_DISABLED){toast("Microsoft sign-in is temporarily disabled.",4000);return}
   const draw=h=>{openOver(`<div class="modal-bg"><div class="modal"><div class="row c"><h2 class="grow" style="margin:0">Sign in with Microsoft</h2><button class="xb" id="mx" aria-label="Close">${ic("x")}</button></div><div id="mb" style="margin-top:12px">${h}</div></div></div>`);
     $("#mx").onclick=async()=>{msStop();try{await api("/auth/cancel","POST",{})}catch(e){}closeOver()}};
   const needId=()=>{draw(`<div class="note" style="margin:0 0 10px">Microsoft requires every launcher to use its own app registration that Mojang has approved. Create a free one, then paste its <b>Application (client) ID</b> here. You only do this once.</div>
@@ -613,7 +651,7 @@ function msSignIn(done){
   start()}
 function addAccountModal(done){
   openOver(`<div class="modal-bg"><div class="modal"><div class="row c"><h2 class="grow" style="margin:0">Add an account</h2><button class="xb" id="ax" aria-label="Close">${ic("x")}</button></div>
-  <div style="display:grid;gap:10px;margin-top:14px"><button class="btn brand" id="ams" style="justify-content:center">Sign in with Microsoft</button><div class="note" style="margin:0">Official Minecraft account. Needed for online-mode servers and your own skin.</div>
+  <div style="display:grid;gap:10px;margin-top:14px"><button class="btn brand" id="ams" style="justify-content:center" disabled aria-disabled="true" title="Temporarily Disabled">Sign in with Microsoft (Temporarily Disabled)</button><div class="note" style="margin:0">Official Minecraft account. Needed for online-mode servers and your own skin.</div>
   <button class="btn" id="aof" style="justify-content:center">Add an offline player</button><div class="note" style="margin:0">Just a name. Works in singleplayer and on offline-mode servers.</div></div></div></div>`);
   $("#ax").onclick=closeOver;$("#ams").onclick=()=>{closeOver();msSignIn(done)};$("#aof").onclick=async()=>{closeOver();if(await askName(true))done&&done()}}
 const blobURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(new Error("Couldn't read the picture."));r.readAsDataURL(b)});
@@ -1759,9 +1797,10 @@ function settingsModal(sec="appearance"){
 }
 const AC=[["Orbit green",""],["Blue","#4c8dff"],["Purple","#a56bff"],["Pink","#ff5fa2"],["Orange","#ff9a3c"],["Red","#ff496e"],["Teal","#2ad4c9"]];
 function pAppearance(p){
-  const th=[["dark","Dark","#16181c","#26292f","#4a4f58"],["light","Light ☀","#f5f5f5","#ffffff","#2c2e31"],["oled","OLED ☾","#000","#16181c","#3a3f47"],["system","Sync with system","#000","#16181c","#3a3f47"]];
+  const th=[["dark","Dark","#16181c","#26292f","#4a4f58"],["light","Light ☀","#f5f5f5","#ffffff","#2c2e31"],["oled","OLED ☾","#000","#16181c","#3a3f47"],["system","Sync with system","#000","#16181c","#3a3f47"],
+    ["christmas-light","Christmas ☀ 🎄","#f7f2e9","#ffffff","#c8222d"],["christmas-dark","Christmas ☾ 🎄","#0d1a14","#15291f","#d6313d"],["halloween-light","Halloween ☀ 🎃","#f6efe3","#fffaf2","#e8650a"],["halloween-dark","Halloween ☾ 🎃","#120a1c","#1e1230","#ff7a18"],["glitch","Glitch","#05060a","#0c0e16","#00e5ff"],["synthwave","Synthwave","#140a2b","#1f1140","#ff2fb8"],["aurora","Aurora","#07131a","#0e2230","#2fe0a8"]];
   const cur=S.settings.theme||"oled";
-  p.innerHTML=`<h3>Color theme</h3><div class="d">Select your preferred color theme across Orbit.</div><div class="themes">${th.map(([k,l,bg,fg,ln])=>`<button class="th ${cur===k?"on":""}" data-th="${k}"><div class="pv" style="background:${bg}"><div style="background:${fg}"><u style="background:${ln}"></u><s><i style="background:${k==="light"?"#2c2e31":"#d6dbe0"}"></i><i style="background:${ln};width:60%"></i></s></div></div><div class="lb"><span class="rd"></span>${l}</div></button>`).join("")}</div>
+  p.innerHTML=`<h3>Color theme</h3><div class="d">Select your preferred color theme across Orbit.</div><div class="themes">${th.map(([k,l,bg,fg,ln])=>`<button class="th ${cur===k?"on":""}" data-th="${k}"><div class="pv" style="background:${bg}"><div style="background:${fg}"><u style="background:${ln}"></u><s><i style="background:${/light$/.test(k)?"#2c2e31":"#d6dbe0"}"></i><i style="background:${ln};width:60%"></i></s></div></div><div class="lb"><span class="rd"></span>${l}</div></button>`).join("")}</div>
   <h3>High contrast</h3><div class="d">Stronger text and borders and a clear focus outline, for easier reading.</div>
   <div class="tgl" id="hc" role="switch" tabindex="0" aria-checked="${!!S.settings.high_contrast}">High contrast mode<span class="sw ${S.settings.high_contrast?"on":""}"></span></div>
   <h3 style="margin-top:22px">Accent color</h3><div class="d">Used for buttons, highlights and links. Text colors are adjusted to stay readable.</div>
@@ -1778,7 +1817,7 @@ function pAccounts(p){
   const st=S.settings,M=st.ms_accounts||[];
   p.innerHTML=`<h3>Microsoft account</h3><div class="d">Sign in with your official Minecraft account to play on online-mode servers with your own skin and cape. Orbit keeps the sign-in on this computer only.</div>
   ${M.length?M.map(x=>`<div class="accrow" style="cursor:default;margin-bottom:6px">${msFace(x,34)}<span class="grow"><b>${esc(x.name)}</b><span class="meta" style="display:block">${x.id===st.ms_active?"Active account":"Signed in"}</span></span>${x.id===st.ms_active?"":`<button class="btn" data-use="${esc(x.id)}">Use this</button>`}<button class="btn" data-out="${esc(x.id)}">Sign out</button></div>`).join(""):'<div class="note">No Microsoft account is signed in.</div>'}
-  <div class="gap" style="margin-top:12px"><button class="btn brand" id="msin">${ic("plus","sm")}Sign in with Microsoft</button>${st.ms_active?'<button class="btn" id="msoff">Play offline instead</button>':""}</div>
+  <div class="gap" style="margin-top:12px"><button class="btn brand" id="msin" disabled aria-disabled="true" title="Temporarily Disabled">${ic("plus","sm")}Sign in with Microsoft (Temporarily Disabled)</button>${st.ms_active?'<button class="btn" id="msoff">Play offline instead</button>':""}</div>
   <h3 style="margin-top:24px">Application ID</h3><div class="d">Microsoft only lets launchers with an approved app registration sign players in. Paste yours here (see the sign-in dialog for how to get one).</div>
   <input type="text" id="mcid2" value="${esc(st.ms_client_id||"")}" placeholder="00000000-0000-0000-0000-000000000000" spellcheck="false"><div class="gap" style="margin-top:10px"><button class="btn" id="mcs">Save ID</button></div>`;
   const redo=async()=>{try{S.settings=await api("/settings")}catch(e){}pAccounts(p)};

@@ -135,8 +135,12 @@ fn set_login(v: Value) { *LOGIN.lock().unwrap_or_else(|e| e.into_inner()) = Some
 
 pub fn status() -> Value { LOGIN.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_else(|| json!({"state": "idle"})) }
 
+/// Microsoft sign-in is temporarily disabled; flip to `false` to re-enable.
+pub const MS_LOGIN_DISABLED: bool = true;
+
 /// Start a sign-in. Returns {user_code, verification_uri, ...} for the UI to show.
 pub fn begin() -> Res {
+    if MS_LOGIN_DISABLED { return Err("Microsoft sign-in is temporarily disabled.".into()); }
     let cid = client_id();
     if cid.is_empty() {
         return Err("Microsoft sign-in needs an Azure application (client) ID. Register a free one at portal.azure.com (a public client, 'Personal Microsoft accounts', device-code flow enabled), have it approved for Minecraft at aka.ms/AppRegInfo, then enter it in Settings > Accounts.".into());
