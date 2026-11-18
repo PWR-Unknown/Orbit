@@ -72,6 +72,11 @@ pub fn save_settings(s: &Map<String, Value>) -> Result<(), String> {
     Ok(())
 }
 
+/// Settings > Launch > "Closing Orbit": whether closing Orbit with games / servers running shows a warning (default on)...
+pub fn close_warning() -> bool { settings().get("close_warning").and_then(|v| v.as_bool()).unwrap_or(true) }
+/// ...and how many seconds its Close button stays disabled (0 to 120, default 5).
+pub fn close_timer() -> u64 { settings().get("close_timer").and_then(|v| v.as_u64()).unwrap_or(5).min(120) }
+
 fn setting_path(key: &str, default: PathBuf) -> PathBuf {
     settings().get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or(default)
 }

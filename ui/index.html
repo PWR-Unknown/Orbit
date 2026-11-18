@@ -29,19 +29,45 @@ html[data-theme^=halloween] h1,html[data-theme^=halloween] h2,html[data-theme^=h
 @keyframes xember{to{background-position:30px -220px}}
 @keyframes xflick{0%,18%,22%,62%,100%{text-shadow:0 0 8px var(--flame)}20%,60%{text-shadow:0 0 2px var(--flame)}}
 /* glitch: scanlines + RGB-split (follows the accent colour) + micro-jitter */
-html[data-theme=glitch]::before{opacity:.5;background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);animation:xscan 9s linear infinite}
-html[data-theme=glitch]::after{opacity:.06;background:linear-gradient(transparent 45%,var(--green) 50%,transparent 55%);background-size:100% 220px;animation:xscan 6s linear infinite}
-html[data-theme=glitch] h1,html[data-theme=glitch] h2,html[data-theme=glitch] h3,html[data-theme=glitch] .snav button.on{text-shadow:-1.5px 0 var(--green),1.5px 0 #ff2d55;animation:xjit 5s steps(1) infinite}
-@keyframes xscan{to{background-position:0 220px}}
+html[data-theme=glitch]::before{opacity:.55;background:repeating-linear-gradient(0deg,rgba(255,255,255,.045) 0 1px,transparent 1px 3px),repeating-linear-gradient(0deg,color-mix(in srgb,var(--green) 9%,transparent) 0 1px,transparent 1px 6px);animation:xscanline .3s linear infinite}
+html[data-theme=glitch]::after{inset:0 0 auto 0;height:150px;opacity:.55;background:linear-gradient(transparent,color-mix(in srgb,var(--green) 20%,transparent) 55%,color-mix(in srgb,var(--green) 34%,transparent) 62%,transparent);animation:xsweep 7s linear infinite,xflick2 .12s steps(2) infinite}
+html[data-theme=glitch] h1,html[data-theme=glitch] h2,html[data-theme=glitch] h3,html[data-theme=glitch] .snav button.on,html[data-theme=glitch] .wm{text-shadow:-1.5px 0 var(--green),1.5px 0 var(--gl2,#ff2d55);animation:xjit 5s steps(1) infinite,xchroma 2.6s ease-in-out infinite}
+html[data-theme=glitch] .inst:hover,html[data-theme=glitch] .scard:hover,html[data-theme=glitch] .btn.brand:hover{animation:xjit .35s steps(1) 1;box-shadow:-2px 0 var(--green),2px 0 var(--gl2,#ff2d55)}
+html.glx #main{animation:xglx .24s steps(2) 1}
+@keyframes xscanline{to{background-position:0 6px}}
+@keyframes xsweep{from{transform:translateY(-150px)}to{transform:translateY(100vh)}}
+@keyframes xflick2{from{opacity:.45}to{opacity:.65}}
+@keyframes xchroma{0%,100%{text-shadow:-1.5px 0 var(--green),1.5px 0 var(--gl2,#ff2d55)}50%{text-shadow:-3.5px 0 var(--green),3.5px 0 var(--gl2,#ff2d55)}}
+@keyframes xglx{0%{transform:translate(-4px,0);filter:drop-shadow(-4px 0 var(--green)) drop-shadow(4px 0 var(--gl2,#ff2d55))}25%{transform:translate(5px,1px);clip-path:inset(8% 0 62% 0)}50%{transform:translate(-3px,-1px);clip-path:inset(55% 0 12% 0)}75%{transform:translate(2px,0);clip-path:none;filter:drop-shadow(3px 0 var(--green)) drop-shadow(-3px 0 var(--gl2,#ff2d55))}100%{transform:none;filter:none;clip-path:none}}
 @keyframes xjit{0%,90%,100%{transform:none}91%{transform:translate(1px,-1px)}93%{transform:translate(-2px,0)}95%{transform:translate(1px,1px)}97%{transform:translate(-1px,0)}}
 /* synthwave: sunset glow + scrolling neon grid */
-html[data-theme=synthwave]::before{opacity:.5;background:radial-gradient(ellipse 60% 35% at 50% 100%,rgba(255,47,184,.35),transparent)}
-html[data-theme=synthwave]::after{top:auto;height:38vh;opacity:.3;background:repeating-linear-gradient(0deg,#ff2fb8 0 1px,transparent 1px 40px),repeating-linear-gradient(90deg,#8a5bff 0 1px,transparent 1px 60px);-webkit-mask-image:linear-gradient(transparent,#000);mask-image:linear-gradient(transparent,#000);animation:xgrid 3s linear infinite}
-@keyframes xgrid{to{background-position:0 40px,0 0}}
+html[data-theme=synthwave]::before{opacity:.55;background:radial-gradient(ellipse 60% 35% at 50% 100%,color-mix(in srgb,var(--green) 38%,transparent),transparent),radial-gradient(circle 150px at 50% calc(100% - 70px),color-mix(in srgb,var(--green) 55%,transparent),transparent 70%);animation:xsun 5s ease-in-out infinite alternate}
+html[data-theme=synthwave]::after{inset:auto 0 0 0;height:42vh;opacity:.38;background:repeating-linear-gradient(0deg,var(--green) 0 1px,transparent 1px 44px),repeating-linear-gradient(90deg,var(--sw2,#8a5bff) 0 1px,transparent 1px 64px);-webkit-mask-image:linear-gradient(transparent,#000);mask-image:linear-gradient(transparent,#000);transform:perspective(420px) rotateX(52deg);transform-origin:50% 100%;animation:xgrid 2.2s linear infinite}
+@keyframes xgrid{to{background-position:0 44px,0 0}}
+@keyframes xsun{from{opacity:.4}to{opacity:.75}}
+html[data-theme=synthwave] body::before,html[data-theme=aurora] body::before{content:"";position:fixed;inset:0 0 40% 0;pointer-events:none;z-index:1;opacity:.7;background-image:radial-gradient(1.2px 1.2px at 30px 40px,#fff,transparent),radial-gradient(1px 1px at 110px 90px,#fff,transparent),radial-gradient(1.5px 1.5px at 170px 20px,#fff,transparent),radial-gradient(1px 1px at 70px 150px,#fff,transparent);background-size:200px 180px;animation:xtwk 4s ease-in-out infinite alternate}
+@keyframes xtwk{from{opacity:.25}to{opacity:.8}}
 /* aurora: slow drifting colour ribbons */
-html[data-theme=aurora]::before{opacity:.35;background:radial-gradient(ellipse 50% 30% at 20% 10%,#2fe0a8,transparent),radial-gradient(ellipse 45% 30% at 70% 5%,#4aa8ff,transparent),radial-gradient(ellipse 40% 25% at 50% 20%,#a56bff,transparent);background-size:200% 100%;animation:xaur 24s ease-in-out infinite alternate}
-@keyframes xaur{to{background-position:100% 0;opacity:.2}}
-@media (prefers-reduced-motion:reduce){html[data-theme]::before,html[data-theme]::after,html[data-theme] h1,html[data-theme] h2,html[data-theme] h3,html[data-theme] .snav button.on{animation:none!important}}
+html[data-theme=aurora]::before{opacity:.4;background:radial-gradient(ellipse 50% 30% at 20% 10%,var(--green),transparent),radial-gradient(ellipse 45% 30% at 70% 5%,#4aa8ff,transparent),radial-gradient(ellipse 40% 25% at 50% 20%,#a56bff,transparent);background-size:200% 100%;animation:xaur 24s ease-in-out infinite alternate}
+html[data-theme=aurora]::after{inset:0 0 35% 0;opacity:.22;background:repeating-linear-gradient(100deg,transparent 0 70px,color-mix(in srgb,var(--green) 55%,transparent) 110px,transparent 150px,rgba(74,168,255,.45) 200px,transparent 250px);-webkit-mask-image:linear-gradient(#000,transparent);mask-image:linear-gradient(#000,transparent);transform-origin:50% 0;animation:xcurt 18s ease-in-out infinite alternate}
+@keyframes xaur{to{background-position:100% 0;opacity:.22}}
+@keyframes xcurt{0%{background-position:0 0;transform:skewX(-6deg) scaleY(1)}50%{transform:skewX(5deg) scaleY(1.12);opacity:.3}100%{background-position:260px 0;transform:skewX(-3deg) scaleY(.95)}}
+/* animation toggle (Settings > Appearance) turns every theme animation off */
+html[data-anim=off]::before,html[data-anim=off]::after,html[data-anim=off] body::before,html[data-anim=off] h1,html[data-anim=off] h2,html[data-anim=off] h3,html[data-anim=off] .snav button.on,html[data-anim=off] .wm,html[data-anim=off] .inst:hover,html[data-anim=off] .scard:hover,html[data-anim=off] #main{animation:none!important}
+html[data-anim=off] #fx{display:none!important}
+html[data-anim=off] *,html[data-anim=off] *::before,html[data-anim=off] *::after{animation:none!important;transition:none!important}
+/* app minimized / unfocused: freeze every running animation */
+html[data-paused] *,html[data-paused] *::before,html[data-paused] *::after{animation-play-state:paused!important}
+/* interactive canvas overlay (Christmas / Halloween, Home + Servers only); the CSS snow layer steps aside while it runs */
+#fx{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:2;display:none}
+html[data-fx=on][data-theme^=christmas]::before{display:none}
+/* split dual-mode theme cards: left half = Light, right half = Dark */
+.th.dual{cursor:default}.th.dual .hv{display:flex}
+.th .half{flex:1;min-width:0;border:0;padding:0;cursor:pointer;position:relative;height:116px;display:grid;place-items:center}.th .half+.half{border-left:1px solid var(--line)}
+.th .half.pv div{width:82%;padding:10px;gap:8px}.th .half.pv u{width:20px;height:20px;border-radius:6px}
+.th .half:hover{filter:brightness(1.08)}.th .half:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.th .half .tag{position:absolute;top:8px;left:8px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.4);color:#fff}.th .half.on .tag{background:var(--green);color:var(--on)}
+.th .lb .sub{margin-left:auto;color:var(--mut);font-weight:500;font-size:12px}
 :root{--green:#1bd96a;--greenh:#3fe583;--red:#ff496e;--orange:#f16436}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font:14px/1.45 Inter,"Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;overflow:hidden}
@@ -86,7 +112,6 @@ input:focus,.dd-btn:focus,.dd.open .dd-btn,select.sel:focus{border-color:var(--g
 .row{display:flex;gap:14px;align-items:flex-start}.row.c{align-items:center}.grow{flex:1;min-width:0}.gap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .empty{text-align:center;padding:60px 0;color:var(--mut)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .7s linear infinite}@keyframes s{to{transform:rotate(1turn)}}
-@media(prefers-reduced-motion:reduce){.spin{animation:none}}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);color:var(--head);padding:10px 18px;border-radius:12px;z-index:50;max-width:80vw;box-shadow:0 8px 24px var(--shadow)}
 /* home / library */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
@@ -304,7 +329,6 @@ input[type=range]{width:100%;accent-color:var(--green);cursor:pointer}
 .schip i{width:8px;height:8px;border-radius:50%;background:var(--mut);display:inline-block;margin:0}
 .schip.running i{background:var(--green)}.schip.starting i,.schip.stopping i{background:var(--orange);animation:pulse .9s infinite alternate}
 @keyframes pulse{to{opacity:.25}}
-@media(prefers-reduced-motion:reduce){.schip i{animation:none!important}}
 .shero{max-width:520px;margin:70px auto;text-align:center}.shero h1{font-size:28px}.shero p{color:var(--mut);margin:8px 0 22px}
 .eggs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .egg{text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;display:flex;flex-direction:column;gap:6px;color:var(--text);align-items:flex-start}
@@ -353,7 +377,7 @@ const LOADERS={vanilla:"Vanilla",fabric:"Fabric",neoforge:"NeoForge",forge:"Forg
 const MODLOADERS=Object.fromEntries(Object.entries(LOADERS).filter(([k])=>k!=="vanilla"));
 const TYPES={modpack:"Modpacks",mod:"Mods",resourcepack:"Resource Packs",datapack:"Data Packs",shader:"Shaders",plugin:"Plugins"};
 const TSING={modpack:"modpack",mod:"mod",resourcepack:"resource pack",datapack:"data pack",shader:"shader",plugin:"plugin"};
-const P={home:"M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10",
+const P={users:"M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M21 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",home:"M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10",
  compass:'<circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z"/>',
  lib:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
  plus:"M12 5v14M5 12h14",x:"M18 6L6 18M6 6l12 12",chev:"M6 9l6 6 6-6",back:"M15 18l-6-6 6-6",fwd:"M9 18l6-6-6-6",check:"M20 6L9 17l-5-5",
@@ -401,21 +425,159 @@ const mq=matchMedia("(prefers-color-scheme: light)");
 function applyTheme(t){const real=t==="system"?(mq.matches?"light":"dark"):t;document.documentElement.dataset.theme=real;applyAccent(S.settings&&S.settings.accent)}
 /* the daily server restart needs the local clock; the window reports its UTC offset (minutes east) */
 function reportTz(){api("/settings","POST",{tz_offset:-new Date().getTimezoneOffset()}).catch(()=>{})}
-function applyLook(){const R=document.documentElement;if(S.settings.high_contrast)R.dataset.contrast="high";else delete R.dataset.contrast;applyTheme(S.settings.theme||"oled")}
+function applyLook(){const R=document.documentElement;if(S.settings.high_contrast)R.dataset.contrast="high";else delete R.dataset.contrast;R.dataset.anim=S.settings.animations===false?"off":"on";applyTheme(S.settings.theme||"oled");FX.sync()}
 /* accent colour: fills use the colour as picked; text in the accent colour is nudged until it is readable on the current theme (7:1 in high contrast) */
 const hexRGB=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16)),rgbHex=a=>"#"+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
 const mixHex=(h,t,a)=>{const x=hexRGB(h),y=hexRGB(t);return rgbHex(x.map((v,i)=>v+(y[i]-v)*a))};
 const lumOf=h=>{const c=hexRGB(h).map(v=>v/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]};
 const contrastOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
 function applyAccent(hex){
-  const R=document.documentElement,st=R.style,props=["--green","--greenh","--accent","--tint","--on","--onacc"];
-  if(!/^#[0-9a-f]{6}$/i.test(hex||"")){props.forEach(p=>st.removeProperty(p));return}
-  const th=R.dataset.theme,hc=R.dataset.contrast==="high",need=hc?7:4.5,LT=/light$/.test(th),bg=LT?"#ffffff":th==="oled"?"#16181c":"#26292f",toward=LT?"#000000":"#ffffff";
+  const R=document.documentElement,st=R.style,props=["--green","--greenh","--accent","--tint","--on","--onacc","--gl2","--accrgb"],HEX=/^#[0-9a-f]{6}$/i;
+  props.forEach(p=>st.removeProperty(p));   // back to the theme's own values first, so a theme default can be read below
+  const cs=getComputedStyle(R),base=HEX.test(hex||"")?hex:cs.getPropertyValue("--green").trim();
+  if(HEX.test(base)){st.setProperty("--accrgb",hexRGB(base).join(","));st.setProperty("--gl2",rgbHex(hexRGB(base).map(v=>255-v)))}   // complement = 2nd chromatic-aberration channel
+  if(!HEX.test(hex||""))return;   // "" = keep the theme's own accent
+  const th=R.dataset.theme,hc=R.dataset.contrast==="high",need=hc?7:4.5,LT=/light$/.test(th),card=cs.getPropertyValue("--card").trim(),bg=HEX.test(card)?card:LT?"#ffffff":"#26292f",toward=LT?"#000000":"#ffffff";
   let txt=hex;for(let i=0;i<24&&contrastOf(txt,bg)<need;i++)txt=mixHex(txt,toward,.1);
   const onFill=contrastOf(hex,"#04130a")>=contrastOf(hex,"#ffffff")?"#04130a":"#ffffff",[r,g,b]=hexRGB(hex);
   st.setProperty("--green",hex);st.setProperty("--greenh",mixHex(hex,"#ffffff",.18));st.setProperty("--accent",txt);
   st.setProperty("--tint",`rgba(${r},${g},${b},${LT?.14:.18})`);st.setProperty("--on",onFill);st.setProperty("--onacc",onFill)}
 mq.addEventListener&&mq.addEventListener("change",()=>{if(S.settings.theme==="system")applyTheme("system")});
+
+/* ---------- theme overlays ----------
+   Christmas (snow that piles up on the floor and on instance/server cards, a tree, swipe-to-clear) and
+   Halloween (slowly growing corner webs, pumpkins, swipeable dust) are drawn on one canvas and only run on
+   Home and Servers. Glitch also gets random "burst" frames here. Everything stops when animations are off. */
+const FX=(()=>{
+  const R=document.documentElement,cv=document.createElement("canvas"),cx=cv.getContext("2d");
+  cv.id="fx";cv.setAttribute("aria-hidden","true");document.body.appendChild(cv);
+  const COL=4,CS=5,GBASE=3,GMAX=34,CMAX=8,WEB_SECS=150,rnd=(a,b)=>a+Math.random()*(b-a);
+  let W=0,H=0,mode=null,fam=null,dark=true,raf=0,last=0,t=0,frame=0,flakes=[],puffs=[],ground=new Float32Array(0),cards=[],cardSnow=new WeakMap(),mainR=null,motes=[],webT0=0,glOn=false,glT=0;
+  const M={x:-999,y:-999,vx:0,vy:0,down:false,in:false};
+  const blocked=()=>{const o=document.getElementById("over");return !!(o&&o.childElementCount)};
+
+  function resize(){const d=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=Math.round(W*d);cv.height=Math.round(H*d);cx.setTransform(d,0,0,d,0,0);
+    const n=Math.ceil(W/COL)+2,g=new Float32Array(n);g.set(ground.subarray(0,Math.min(n,ground.length)));ground=g}
+  addEventListener("resize",()=>{if(mode)resize()});
+  addEventListener("mousemove",e=>{if(M.in){M.vx=e.clientX-M.x;M.vy=e.clientY-M.y}M.x=e.clientX;M.y=e.clientY;M.in=true});
+  addEventListener("mousedown",e=>{if(e.button===0)M.down=true});addEventListener("mouseup",()=>{M.down=false});
+  document.addEventListener("mouseleave",()=>{M.in=false;M.down=false});addEventListener("blur",()=>{M.in=false;M.down=false});
+
+  /* the cards snow can settle on, clipped to the scrolling area */
+  function refreshCards(){const m=document.getElementById("main");if(!m)return;mainR=m.getBoundingClientRect();cards=[];
+    document.querySelectorAll("#main .inst,#main .scard,#main .jrow").forEach(el=>{const b=el.getBoundingClientRect();if(b.width<60||b.top<mainR.top||b.top>mainR.bottom-6)return;
+      const n=Math.ceil(b.width/CS)+1;let s=cardSnow.get(el);if(!s||s.length!==n){s=new Float32Array(n);cardSnow.set(el,s)}cards.push({l:b.left,r:b.right,top:b.top,w:b.width,sn:s})})}
+
+  /* ---- Christmas ---- */
+  const flake=init=>({x:rnd(0,W),y:init?rnd(-H,H*.4):rnd(-40,-5),r:rnd(1,3),vy:rnd(.5,1.5),ph:rnd(0,6.28),ix:0,iy:0});
+  const addSnow=(a,i,v,max)=>{for(let j=-1;j<=1;j++){const k=i+j;if(k>=0&&k<a.length)a[k]=Math.min(max,a[k]+(j?v*.45:v))}};
+  const relax=a=>{for(let i=0;i<a.length-1;i++){const d=a[i]-a[i+1];if(Math.abs(d)>1.4){const m=.18*Math.sign(d);a[i]-=m;a[i+1]+=m}}};
+  function puff(x,y,n,vx,vy){for(let i=0;i<n&&puffs.length<240;i++)puffs.push({x,y,vx:vx*.25+rnd(-1.6,1.6),vy:vy*.25+rnd(-2.2,.4),r:rnd(1,2.4),a:1})}
+  function christmas(k){
+    const want=Math.min(150,Math.round(W/11));while(flakes.length<want)flakes.push(flake(flakes.length<20));
+    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=M.down?95:58;
+    for(const f of flakes){
+      f.ph+=.018*k;const py=f.y;f.x+=(Math.sin(f.ph)*.35+f.ix)*k;f.y+=(f.vy+f.iy)*k;f.ix*=Math.pow(.93,k);f.iy*=Math.pow(.93,k);
+      if(act){const dx=f.x-M.x,dy=f.y-M.y,d2=dx*dx+dy*dy;if(d2<(rad+30)*(rad+30)){const d=Math.sqrt(d2)||1,s=1-Math.min(1,d/(rad+30));f.ix+=(dx/d*s*1.6+M.vx*.05*s)*k;f.iy+=(dy/d*s*1.1+M.vy*.05*s)*k}}
+      let landed=false;
+      for(const c of cards){if(f.x<c.l+10||f.x>c.r-10)continue;const i=((f.x-c.l)/CS)|0,surf=c.top-c.sn[i];if(f.y>=surf-1&&py<=surf+3){addSnow(c.sn,i,.5,CMAX);landed=true;break}}
+      if(!landed){const gi=Math.max(0,Math.min(ground.length-1,(f.x/COL)|0)),gt=H-GBASE-ground[gi];if(f.y>=gt){addSnow(ground,gi,.5,GMAX);landed=true}}
+      if(landed||f.y>H+10||f.x<-20||f.x>W+20)Object.assign(f,flake(false));
+    }
+    if(frame%6===0){relax(ground);cards.forEach(c=>relax(c.sn))}
+    /* swipe: hovering clears a little, dragging clears everything under the cursor */
+    if(act&&(sp>.6||M.down)){
+      const amt=M.down?99:1.2+sp*.45;
+      for(let i=0;i<ground.length;i++){const x=i*COL,dx=Math.abs(x-M.x);if(dx>rad)continue;const reach=Math.sqrt(rad*rad-dx*dx),top=H-GBASE-ground[i];
+        if(M.y+reach>top&&ground[i]>.2){if(ground[i]>3&&Math.random()<.1)puff(x,top,1,M.vx,M.vy);ground[i]=Math.max(0,ground[i]-amt)}}
+      for(const c of cards){const s=c.sn;for(let i=0;i<s.length;i++){const x=c.l+i*CS,dx=Math.abs(x-M.x);if(dx>rad||s[i]<.2)continue;const reach=Math.sqrt(rad*rad-dx*dx);
+        if(Math.abs(c.top-M.y)<reach+s[i]){if(Math.random()<.12)puff(x,c.top-s[i],1,M.vx,M.vy);s[i]=Math.max(0,s[i]-amt)}}}
+    }
+    const snowFill="#ffffff",edge=dark?null:"#9fb9d6",fl=dark?"#ffffff":"#9fb9d6";
+    tree(W-95,H-GBASE+6,H<520?.6:.9);
+    cx.fillStyle=snowFill;cx.beginPath();cx.moveTo(0,H);for(let i=0;i<ground.length;i++)cx.lineTo(i*COL,H-GBASE-ground[i]);cx.lineTo(W+COL,H);cx.closePath();cx.fill();
+    if(edge){cx.strokeStyle=edge;cx.lineWidth=1;cx.beginPath();for(let i=0;i<ground.length;i++){const y=H-GBASE-ground[i]-.5;i?cx.lineTo(i*COL,y):cx.moveTo(0,y)}cx.stroke()}
+    cx.save();cx.beginPath();cx.rect(mainR.left,mainR.top,mainR.width,mainR.height);cx.clip();cx.fillStyle=snowFill;
+    for(const c of cards){cx.beginPath();cx.moveTo(c.l+8,c.top+2);for(let i=0;i<c.sn.length;i++){const x=c.l+i*CS,tp=Math.min(1,Math.min(x-c.l,c.r-x)/16);cx.lineTo(x,c.top-c.sn[i]*Math.max(0,tp)+1)}cx.lineTo(c.r-8,c.top+2);cx.closePath();cx.fill();if(edge){cx.strokeStyle=edge;cx.stroke()}}
+    cx.restore();
+    cx.fillStyle=fl;for(const f of flakes){cx.globalAlpha=.55+f.r*.15;cx.beginPath();cx.arc(f.x,f.y,f.r,0,6.283);cx.fill()}
+    cx.fillStyle=snowFill;for(let i=puffs.length-1;i>=0;i--){const q=puffs[i];q.x+=q.vx*k;q.y+=q.vy*k;q.vy+=.12*k;q.a-=.025*k;if(q.a<=0){puffs.splice(i,1);continue}cx.globalAlpha=q.a;cx.beginPath();cx.arc(q.x,q.y,q.r,0,6.283);cx.fill()}
+    cx.globalAlpha=1;
+  }
+  function tree(x,y,s){
+    cx.save();cx.translate(x,y);cx.scale(s,s);cx.fillStyle="#5a3a22";cx.fillRect(-9,-18,18,24);
+    [[62,-14,-78,"#1d6b38"],[52,-62,-118,"#23803f"],[40,-104,-154,"#2a9650"]].forEach(([hw,by,ay,c])=>{cx.fillStyle=c;cx.beginPath();cx.moveTo(-hw,by);cx.lineTo(hw,by);cx.lineTo(0,ay);cx.closePath();cx.fill()});
+    const cols=["#ff4d5a","#f4c95d","#5ab8ff","#fff"];
+    [[-38,-24],[-12,-30],[20,-24],[44,-26],[-30,-70],[2,-76],[32,-68],[-22,-112],[12,-118],[28,-108],[-6,-146],[-44,-18],[8,-96],[-16,-90]].forEach(([lx,ly],i)=>{cx.globalAlpha=.45+.55*Math.abs(Math.sin(t*2.2+i*1.7));cx.fillStyle=cols[i%4];cx.beginPath();cx.arc(lx,ly,3.2,0,6.283);cx.fill()});
+    cx.globalAlpha=1;cx.save();cx.shadowColor="#f4c95d";cx.shadowBlur=14+6*Math.sin(t*3);cx.fillStyle="#f4c95d";cx.beginPath();
+    for(let i=0;i<10;i++){const a=-1.5708+i*.6283,r=i%2?4:10;cx.lineTo(Math.cos(a)*r,-160+Math.sin(a)*r)}cx.closePath();cx.fill();cx.restore();cx.restore();
+  }
+
+  /* ---- Halloween ---- */
+  function web(Rd,g){
+    const sp=7,rings=9,sg=Math.min(1,g*1.6),rg=Math.max(0,(g-.12)/.88)*rings;cx.lineWidth=1;
+    for(let i=0;i<sp;i++){const a=i/(sp-1)*1.5708;cx.beginPath();cx.moveTo(0,0);cx.lineTo(Math.cos(a)*Rd*sg,Math.sin(a)*Rd*sg);cx.stroke()}
+    for(let r=1;r<=Math.ceil(rg);r++){const rr=Rd*r/rings;cx.globalAlpha=Math.min(1,rg-(r-1))*.9;cx.beginPath();
+      for(let i=0;i<sp;i++){const a=i/(sp-1)*1.5708,px=Math.cos(a)*rr,py=Math.sin(a)*rr;if(!i)cx.moveTo(px,py);else{const am=a-.5*1.5708/(sp-1),c=rr*.84;cx.quadraticCurveTo(Math.cos(am)*c,Math.sin(am)*c,px,py)}}cx.stroke()}
+    cx.globalAlpha=1}
+  function spider(x,ly,a){cx.save();cx.globalAlpha=a;cx.strokeStyle=dark?"rgba(230,225,245,.55)":"rgba(80,60,100,.6)";cx.lineWidth=1;cx.beginPath();cx.moveTo(x,mainR.top);cx.lineTo(x,mainR.top+ly);cx.stroke();
+    cx.fillStyle=dark?"#1a1226":"#2a1a38";cx.strokeStyle=cx.fillStyle;cx.translate(x,mainR.top+ly+6);cx.beginPath();cx.arc(0,0,5,0,6.283);cx.fill();cx.beginPath();cx.arc(0,-6,3,0,6.283);cx.fill();
+    for(let i=0;i<4;i++){const o=i*3-4.5,w=Math.sin(t*3+i)*1.5;cx.beginPath();cx.moveTo(0,0);cx.lineTo(-9,o+w);cx.lineTo(-13,o+7+w);cx.moveTo(0,0);cx.lineTo(9,o-w);cx.lineTo(13,o+7-w);cx.stroke()}
+    cx.fillStyle="#ff7a18";cx.fillRect(-2.5,-8,1.5,1.5);cx.fillRect(1,-8,1.5,1.5);cx.restore()}
+  const oval=(x,y,rx,ry)=>{cx.beginPath();cx.ellipse(x,y,rx,ry,0,0,6.283);cx.fill()};
+  function pumpkin(x,base,r,i){
+    const cy=base-r*.82,fl=.72+.28*Math.sin(t*7+i*2.1)*Math.sin(t*3.3+i);
+    const g=cx.createRadialGradient(x,cy,r*.2,x,cy,r*2.1);g.addColorStop(0,`rgba(255,140,30,${.22*fl})`);g.addColorStop(1,"rgba(255,140,30,0)");cx.fillStyle=g;cx.fillRect(x-r*2.2,cy-r*2.2,r*4.4,r*4.4);
+    cx.fillStyle="#b84605";oval(x-r*.55,cy,r*.55,r*.8);oval(x+r*.55,cy,r*.55,r*.8);cx.fillStyle="#e8650a";oval(x-r*.3,cy,r*.6,r*.85);oval(x+r*.3,cy,r*.6,r*.85);cx.fillStyle="#ff7a18";oval(x,cy,r*.5,r*.88);
+    cx.fillStyle="#4a6b1f";cx.beginPath();cx.moveTo(x-r*.12,cy-r*.8);cx.lineTo(x-r*.06,cy-r*1.1);cx.lineTo(x+r*.16,cy-r*1.05);cx.lineTo(x+r*.1,cy-r*.8);cx.closePath();cx.fill();
+    cx.save();cx.shadowColor="#ffb02e";cx.shadowBlur=r*.5*fl;cx.fillStyle=`rgba(255,${190+(40*fl|0)},60,${.55+.45*fl})`;cx.beginPath();
+    cx.moveTo(x-r*.5,cy-r*.15);cx.lineTo(x-r*.18,cy-r*.15);cx.lineTo(x-r*.34,cy-r*.45);cx.closePath();cx.moveTo(x+r*.18,cy-r*.15);cx.lineTo(x+r*.5,cy-r*.15);cx.lineTo(x+r*.34,cy-r*.45);cx.closePath();
+    if(i%2){cx.moveTo(x-r*.5,cy+r*.18);cx.quadraticCurveTo(x,cy+r*.62,x+r*.5,cy+r*.18);cx.quadraticCurveTo(x,cy+r*.36,x-r*.5,cy+r*.18)}
+    else{cx.moveTo(x-r*.5,cy+r*.2);for(let j=0;j<5;j++)cx.lineTo(x-r*.5+r*.25*(j+.5),cy+r*(j%2?.2:.5)),cx.lineTo(x-r*.5+r*.25*(j+1),cy+r*.2);cx.lineTo(x+r*.5,cy+r*.2);cx.lineTo(x+r*.4,cy+r*.5);cx.lineTo(x-r*.4,cy+r*.5)}
+    cx.closePath();cx.fill();cx.restore()}
+  const mote=init=>({x:rnd(0,W),y:init?rnd(0,H):rnd(0,H*.6),vx:0,vy:0,base:rnd(.06,.22),r:rnd(.8,2.4),a:0,amax:rnd(.25,.7),ph:rnd(0,6.28),s:rnd(0,6.28),st:0});
+  function halloween(k){
+    const g=Math.min(1,.04+(performance.now()-webT0)/1000/WEB_SECS),e=1-Math.pow(1-g,2),Rd=Math.min(230,Math.max(120,W*.2)),wc=dark?"rgba(228,222,245,.5)":"rgba(80,60,100,.5)";
+    cx.save();cx.strokeStyle=wc;cx.translate(mainR.left,mainR.top);web(Rd,e);cx.restore();
+    cx.save();cx.strokeStyle=wc;cx.translate(mainR.right-14,mainR.top);cx.scale(-1,1);web(Rd,e);cx.restore();
+    if(g>.5)spider(mainR.right-14-Rd*.42,24+34*(.5+.5*Math.sin(t*.5)),Math.min(1,(g-.5)*2));
+    [[.05,32],[.17,24],[.33,38],[.5,27],[.66,35],[.8,25],[.93,30]].forEach(([fx,r],i)=>{if(fx*W>56)pumpkin(fx*W,H-1,r,i)});
+    const want=Math.min(90,Math.round(W/16));while(motes.length<want)motes.push(mote(true));
+    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=M.down?130:85;cx.fillStyle=dark?"#e6dff5":"#6a4a8a";
+    for(let i=0;i<motes.length;i++){const p=motes[i];p.ph+=.012*k;
+      p.vx+=(Math.sin(p.ph*1.3+p.s)*.012-p.vx*.02)*k;p.vy+=(p.base+Math.cos(p.ph)*.03-p.vy)*.03*k;
+      if(act){const dx=p.x-M.x,dy=p.y-M.y,d2=dx*dx+dy*dy;if(d2<rad*rad){const d=Math.sqrt(d2)||1,s=1-d/rad;p.vx+=(dx/d*s*.9+M.vx*.07*s)*k;p.vy+=(dy/d*s*.7+M.vy*.07*s)*k;if((sp>8||M.down)&&s>.15)p.st=2}}
+      p.x+=p.vx*k;p.y+=p.vy*k;
+      if(p.y>=H-3){p.y=H-3;p.vy=0;p.vx*=.8;if(!p.st)p.st=1}               // settled on the floor
+      if(p.st===0)p.a=Math.min(p.amax,p.a+.01*k);else p.a-=(p.st===2?.035:.008)*k;   // swiped = vanishes fast, settled = fades slowly
+      if(p.a<=0&&p.st){motes[i]=mote(false);continue}
+      if(p.x<-10)p.x=W+10;else if(p.x>W+10)p.x=-10;
+      cx.globalAlpha=Math.max(0,p.a);cx.beginPath();cx.arc(p.x,p.y,p.r,0,6.283);cx.fill()}
+    cx.globalAlpha=1;
+  }
+
+  function loop(ts){raf=requestAnimationFrame(loop);const dt=Math.min(.05,(ts-last)/1000||.016),k=dt*60;last=ts;t+=dt;frame++;
+    M.vx*=Math.pow(.8,k);M.vy*=Math.pow(.8,k);if(!mode)return;if(frame%2===0||!mainR)refreshCards();if(!mainR)return;
+    cx.clearRect(0,0,W,H);mode==="christmas"?christmas(k):halloween(k)}
+  const stop=()=>{if(raf)cancelAnimationFrame(raf);raf=0;cx.clearRect(0,0,W,H);cv.style.display="none"};
+
+  /* Glitch: now and then the whole page tears for a moment (see html.glx in the CSS) */
+  function glitch(on){if(on===glOn)return;glOn=on;clearTimeout(glT);R.classList.remove("glx");if(!on)return;
+    const go=()=>{glT=setTimeout(()=>{R.classList.add("glx");glT=setTimeout(()=>{R.classList.remove("glx");go()},120+Math.random()*160)},2200+Math.random()*4800)};go()}
+
+  /* called when the theme, the animation switch or the page changes */
+  function sync(){
+    const th=R.dataset.theme||"",page=typeof S==="object"?S.page:"",animOn=(S.settings&&S.settings.animations)!==false&&!document.hidden&&document.hasFocus(),
+      f=/^christmas/.test(th)?"christmas":/^halloween/.test(th)?"halloween":null,want=animOn&&f&&(page==="home"||page==="lib"||page==="servers")?f:null;
+    dark=/dark$/.test(th)||!/light$/.test(th);
+    if(f!==fam){fam=f;flakes=[];puffs=[];motes=[];ground=new Float32Array(0);cardSnow=new WeakMap();webT0=performance.now()}
+    mode=want;R.dataset.fx=want?"on":"off";glitch(animOn&&th==="glitch");
+    if(!mode){stop();return}
+    cv.style.display="block";resize();if(!raf){last=performance.now();raf=requestAnimationFrame(loop)}}
+  return{sync}
+})();
+(function(){const R=document.documentElement,upd=()=>{const p=document.hidden||!document.hasFocus();if(p)R.setAttribute("data-paused","");else R.removeAttribute("data-paused");try{FX.sync()}catch(e){}};
+  ["blur","focus","pageshow"].forEach(e=>addEventListener(e,upd));document.addEventListener("visibilitychange",upd);(document.hidden||!document.hasFocus())&&R.setAttribute("data-paused","")})();
 
 const S={tasks:[],tpOpen:false,pj:null,upd:{},run:{},itab:"content",fpath:"",page:"home",inst:null,instances:[],settings:{},detail:null,bt:null,filters:{},vers:{},shut:{},ls:"",cq:"",ct:"all",groups:[],lib:{sort:"name",group:"custom",loader:[],mc:[],shut:{}},
   br:{type:"mod",source:"modrinth",q:"",sort:"relevance",view:20,page:1,cats:[],loader:"",mc:"",hide:false,hits:[],total:0,loading:false,err:""}};
@@ -533,7 +695,7 @@ function shView(l,n){
     try{await api(`/screenshots/${encodeURIComponent(x.iid)}/img?f=${encodeURIComponent(x.path)}`,"DELETE")}catch(e){return toast(e.message)}
     S.sh.all=S.sh.all.filter(y=>y!==x);const nl=shList();closeOver();shDraw();if(nl.length)shView(nl,Math.min(n,nl.length-1))};
 }
-function render(){const m=$("#main");m.scrollTop=0;m.className=["browse","home","lib","inst","proj","servers","srv"].includes(S.page)?"split":"";topbar();({home:rHome,lib:rHome,inst:rInst,browse:rBrowse,shots:rShots,proj:rProj,servers:rServers,srv:rSrv})[S.page](m)}
+function render(){const m=$("#main");m.scrollTop=0;m.className=["browse","home","lib","inst","proj","servers","srv"].includes(S.page)?"split":"";topbar();({home:rHome,lib:rHome,inst:rInst,browse:rBrowse,shots:rShots,proj:rProj,servers:rServers,srv:rSrv})[S.page](m);FX.sync()}
 const tile=(name,url,cls="")=>`<div class="tile ${cls}" style="background:${url?"var(--bg)":tileColor(name)}" data-bg="${esc(tileColor(name))}" data-l="${esc((name[0]||"?").toUpperCase())}">${url?`<img src="${esc(url)}" alt="" referrerpolicy="no-referrer" onerror="const t=this.parentNode;t.style.background=t.dataset.bg;t.textContent=t.dataset.l">`:esc((name[0]||"?").toUpperCase())}</div>`;
 
 /* icon of a mod / pack that has none from Modrinth / CurseForge: the server reads it out of the file itself */
@@ -764,6 +926,29 @@ function askText(title,label,value="",ok="Save"){return new Promise(res=>{
   openOver(`<div class="modal-bg"><div class="modal"><h2>${esc(title)}</h2><div class="field"><label class="l" for="at">${esc(label)}</label><input type="text" id="at" maxlength="40" value="${esc(value)}"></div><div class="gap" style="justify-content:flex-end;margin-top:16px"><button class="btn" id="ac">Cancel</button><button class="btn brand" id="ao">${esc(ok)}</button></div></div></div>`);
   const t=$("#at");t.focus();t.select();$("#ac").onclick=()=>{closeOver();res(null)};
   const go_=()=>{const v=t.value.trim();if(!v)return toast("Enter a name first.");closeOver();res(v)};$("#ao").onclick=go_;t.onkeydown=e=>{if(e.key==="Enter")go_()}})}
+/* ---------- closing Orbit: when games / servers are running, Rust asks the page to show this (window.__orbitClose) ---------- */
+async function quitApp(){
+  S.quitting=true;document.onkeydown=null;
+  openOver(`<div class="modal-bg"><div class="modal" style="text-align:center" role="alert"><h2>Shutting down…</h2><div class="note" style="margin:8px 0 14px">Warning players, saving worlds and stopping Minecraft. Orbit closes by itself when it's done.</div><span class="spin"></span></div></div>`);
+  try{await api("/app/quit","POST",{})}catch(e){}   // Orbit exits when everything is stopped, so this may never answer
+}
+async function askClose(){
+  if(S.quitting||$("#co"))return;
+  let r={instances:[],servers:[]};try{r=await api("/app/running")}catch(e){}
+  if((!r.instances.length&&!r.servers.length)||S.settings.close_warning===false)return quitApp();
+  const nm=id=>{const i=S.instances.find(x=>x.id===id);return i?i.name:id},li=(i,t,n)=>`<li style="display:flex;gap:8px;align-items:center;color:var(--head)">${ic(i,"sm")}<span class="ell">${esc(n)}</span><span class="meta">${t}</span></li>`;
+  let left=Math.max(0,Math.min(120,+S.settings.close_timer||0));
+  openOver(`<div class="modal-bg"><div class="modal" role="alertdialog" aria-label="Close Orbit"><h2>Close Orbit?</h2>
+   <div class="d" style="margin:0 0 12px">Closing Orbit will shut down all running Minecraft instances and servers.${r.servers.length?" Players on a server get an in-game warning first, and the server is stopped cleanly.":""}</div>
+   <ul style="list-style:none;margin:0;padding:0;display:grid;gap:6px">${r.instances.map(i=>li("play","game",nm(i))).join("")}${r.servers.map(n=>li("server","server",n)).join("")}</ul>
+   <div class="gap" style="justify-content:flex-end;margin-top:18px"><button class="btn" id="cc">Keep Orbit open</button><button class="btn brand" id="co">Close Orbit</button></div></div></div>`);
+  const ok=$("#co"),paint=()=>{ok.disabled=left>0;ok.textContent=left>0?`Close Orbit (${left})`:"Close Orbit"};paint();
+  const tm=setInterval(()=>{if(!ok.isConnected){clearInterval(tm);return}left--;paint();if(left<=0)clearInterval(tm)},1000);
+  $("#cc").onclick=()=>{clearInterval(tm);closeOver()};
+  ok.onclick=()=>{if(left>0)return;clearInterval(tm);quitApp()};
+  $("#cc").focus();
+}
+window.__orbitClose=askClose;
 function groupsModal(i){
   const sel=new Set(i.groups||[]);let all=[...S.groups];
   const draw=()=>{openOver(`<div class="modal-bg"><div class="modal"><h2>Groups for ${esc(i.name)}</h2><div class="note" style="margin:0 0 12px">An instance can be in several groups.</div>
@@ -1327,7 +1512,7 @@ function drawServers(){
   if(!S.sv.list.length){l.innerHTML=`<div class="shero"><h1>Run your own server</h1><p>Pick Paper, Fabric, Forge and more, or a Modrinth modpack. Orbit downloads it, sets it up and keeps it running, with a live console and one-click plugins and mods.</p><button class="btn brand" id="snew2">${ic("plus","sm")}Create a server</button><div class="note" style="margin-top:18px">Servers you already have? Put their folders in<br><span style="user-select:all">${esc(S.sv.dir)}</span><br>or change the folder with the gear above.</div></div>`;$("#snew2").onclick=newServer;return}
   l.innerHTML=`<div class="sgrid">${S.sv.list.map(s=>{const st=s.status,alloc=s.ram||S.sv.ram;
     return`<div class="scard" tabindex="0" role="button" data-n="${esc(s.name)}"><div class="top">${stile(s)}<div class="grow"><div class="nm">${esc(s.name)}</div><div class="meta">${svTitle(s)}</div></div>${schip(st)}</div>
-    <div class="sstats"><span>${ic("globe","sm")}Port ${s.port}</span><span>${ic("cubes","sm")}${st.running?GB(st.ram_mb)+" / ":""}${GB(alloc)}${s.ram?"":" (default)"}</span>${s.content?`<span>${ic(s.content==="plugins"?"plug":"box","sm")}${s.count} ${s.content==="plugins"?"plugin":"mod"}${s.count===1?"":"s"}</span>`:""}</div>
+    <div class="sstats"><span>${ic("globe","sm")}Port ${s.port}</span>${st.players!=null?`<span title="Players online / max">${ic("users","sm")}${st.players}/${st.max_players!=null?st.max_players:s.max_players||"?"}</span>`:""}<span>${ic("cubes","sm")}${st.running?GB(st.ram_mb)+" / ":""}${GB(alloc)}${s.ram?"":" (default)"}</span>${s.content?`<span>${ic(s.content==="plugins"?"plug":"box","sm")}${s.count} ${s.content==="plugins"?"plugin":"mod"}${s.count===1?"":"s"}</span>`:""}</div>
     <div class="sbtns">${st.state==="stopped"?`<button class="btn brand sm" data-go="start">${ic("play","sm")}Start</button>`:st.state==="stopping"?`<button class="btn sm" disabled><span class="spin"></span>Stopping</button>`:`<button class="btn sm" data-go="stop">${ic("stop","sm")}Stop</button>`}<span class="grow"></span><span class="meta">${s.eula===false?"EULA not accepted":""}</span></div></div>`}).join("")}</div>`;
   l.querySelectorAll(".scard").forEach(c=>{const n=c.dataset.n;c.onclick=e=>{if(e.target.closest("[data-go]"))return;go("srv",n)};c.onkeydown=e=>{if(e.key==="Enter"&&e.target===c)go("srv",n)};
     const b=c.querySelector("[data-go]");if(b)b.onclick=async()=>{b.disabled=true;try{await sapi(n,"/"+b.dataset.go,"POST",{})}catch(e){toast(e.message,5000)}setTimeout(srvRefresh,600)}});
@@ -1795,18 +1980,31 @@ function settingsModal(sec="appearance"){
   ov().querySelectorAll("[data-sec]").forEach(b=>b.onclick=()=>settingsModal(b.dataset.sec));
   api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,accounts:pAccounts,curseforge:pCF,tlauncher:pTL,import:pImport,about:pAbout})[sec]($("#sp"))});
 }
-const AC=[["Orbit green",""],["Blue","#4c8dff"],["Purple","#a56bff"],["Pink","#ff5fa2"],["Orange","#ff9a3c"],["Red","#ff496e"],["Teal","#2ad4c9"]];
+const AC=[["Theme default",""],["Orbit green","#1bd96a"],["Blue","#4c8dff"],["Purple","#a56bff"],["Pink","#ff5fa2"],["Orange","#ff9a3c"],["Red","#ff496e"],["Teal","#2ad4c9"]];
+const THEME_ACC={"christmas-light":"#c8222d","christmas-dark":"#d6313d","halloween-light":"#e8650a","halloween-dark":"#ff7a18",glitch:"#00e5ff",synthwave:"#ff2fb8",aurora:"#2fe0a8"};
 function pAppearance(p){
-  const th=[["dark","Dark","#16181c","#26292f","#4a4f58"],["light","Light ☀","#f5f5f5","#ffffff","#2c2e31"],["oled","OLED ☾","#000","#16181c","#3a3f47"],["system","Sync with system","#000","#16181c","#3a3f47"],
-    ["christmas-light","Christmas ☀ 🎄","#f7f2e9","#ffffff","#c8222d"],["christmas-dark","Christmas ☾ 🎄","#0d1a14","#15291f","#d6313d"],["halloween-light","Halloween ☀ 🎃","#f6efe3","#fffaf2","#e8650a"],["halloween-dark","Halloween ☾ 🎃","#120a1c","#1e1230","#ff7a18"],["glitch","Glitch","#05060a","#0c0e16","#00e5ff"],["synthwave","Synthwave","#140a2b","#1f1140","#ff2fb8"],["aurora","Aurora","#07131a","#0e2230","#2fe0a8"]];
-  const cur=S.settings.theme||"oled";
-  p.innerHTML=`<h3>Color theme</h3><div class="d">Select your preferred color theme across Orbit.</div><div class="themes">${th.map(([k,l,bg,fg,ln])=>`<button class="th ${cur===k?"on":""}" data-th="${k}"><div class="pv" style="background:${bg}"><div style="background:${fg}"><u style="background:${ln}"></u><s><i style="background:${/light$/.test(k)?"#2c2e31":"#d6dbe0"}"></i><i style="background:${ln};width:60%"></i></s></div></div><div class="lb"><span class="rd"></span>${l}</div></button>`).join("")}</div>
-  <h3>High contrast</h3><div class="d">Stronger text and borders and a clear focus outline, for easier reading.</div>
+  const cur=S.settings.theme||"oled",animOn=S.settings.animations!==false;
+  /* single themes: [key,label,bg,card,line]; dual themes: one slot, left half = Light, right half = Dark */
+  const th=[[ "dark","Dark","#16181c","#26292f","#4a4f58"],["light","Light ☀","#f5f5f5","#ffffff","#2c2e31"],["oled","OLED ☾","#000","#16181c","#3a3f47"],["system","Sync with system","#000","#16181c","#3a3f47"],
+    {n:"Christmas 🎄",l:["christmas-light","#f7f2e9","#ffffff","#c8222d"],d:["christmas-dark","#0d1a14","#15291f","#d6313d"]},
+    {n:"Halloween 🎃",l:["halloween-light","#f6efe3","#fffaf2","#e8650a"],d:["halloween-dark","#120a1c","#1e1230","#ff7a18"]},
+    ["glitch","Glitch","#05060a","#0c0e16","#00e5ff"],["synthwave","Synthwave","#140a2b","#1f1140","#ff2fb8"],["aurora","Aurora","#07131a","#0e2230","#2fe0a8"]];
+  const prev=(fg,ln,lt)=>`<div style="background:${fg}"><u style="background:${ln}"></u><s><i style="background:${lt?"#2c2e31":"#d6dbe0"}"></i><i style="background:${ln};width:60%"></i></s></div>`;
+  const one=([k,l,bg,fg,ln])=>`<button class="th ${cur===k?"on":""}" data-th="${k}"><div class="pv" style="background:${bg}">${prev(fg,ln,/light$/.test(k))}</div><div class="lb"><span class="rd"></span>${l}</div></button>`;
+  const two=d=>{const half=([k,bg,fg,ln],tag,nm)=>`<button class="half pv ${cur===k?"on":""}" data-th="${k}" style="background:${bg}" aria-label="${d.n} ${nm}" aria-pressed="${cur===k}">${prev(fg,ln,nm==="light")}<span class="tag">${tag}</span></button>`,
+      on=cur===d.l[0]||cur===d.d[0];
+    return`<div class="th dual ${on?"on":""}" role="group" aria-label="${d.n}"><div class="hv">${half(d.l,"☀ Light","light")}${half(d.d,"☾ Dark","dark")}</div><div class="lb"><span class="rd"></span>${d.n}<span class="sub">${cur===d.l[0]?"Light":cur===d.d[0]?"Dark":"Light / Dark"}</span></div></div>`};
+  p.innerHTML=`<h3>Color theme</h3><div class="d">Select your preferred color theme across Orbit. Christmas and Halloween have a Light and a Dark side: click the half you want.</div><div class="themes">${th.map(t=>Array.isArray(t)?one(t):two(t)).join("")}</div>
+  <h3>Theme animations</h3><div class="d">Animated backgrounds and effects for the Christmas, Halloween, Glitch, Synthwave and Aurora themes. The interactive snow, webs and dust only appear on Home and Servers.</div>
+  <div class="tgl" id="an" role="switch" tabindex="0" aria-checked="${animOn}">Theme animations: ${animOn?"On":"Off"}<span class="sw ${animOn?"on":""}"></span></div>
+  <h3 style="margin-top:22px">High contrast</h3><div class="d">Stronger text and borders and a clear focus outline, for easier reading.</div>
   <div class="tgl" id="hc" role="switch" tabindex="0" aria-checked="${!!S.settings.high_contrast}">High contrast mode<span class="sw ${S.settings.high_contrast?"on":""}"></span></div>
-  <h3 style="margin-top:22px">Accent color</h3><div class="d">Used for buttons, highlights and links. Text colors are adjusted to stay readable.</div>
-  <div class="swts" id="acs">${AC.map(([n,h])=>`<button class="swt ${(S.settings.accent||"")===h?"on":""}" data-ac="${h}" title="${n}" aria-label="${n}" style="background:${h||"#1bd96a"}"></button>`).join("")}<label class="swt cust ${S.settings.accent&&!AC.some(a=>a[1]===S.settings.accent)?"on":""}" title="Custom color"><input type="color" id="acc" aria-label="Custom accent color" value="${S.settings.accent||"#1bd96a"}"></label></div>
-  <div class="note" style="margin-top:6px">${S.settings.accent?`Accent: ${esc(S.settings.accent)}`:"Accent: Orbit green (default)"}</div>`;
-  p.querySelectorAll("[data-th]").forEach(b=>b.onclick=async()=>{const t=b.dataset.th;applyTheme(t);S.settings=await api("/settings","POST",{theme:t});pAppearance(p)});
+  <h3 style="margin-top:22px">Accent color</h3><div class="d">Used for buttons, highlights and links. "Theme default" keeps each theme's own colour. Text colors are adjusted to stay readable.</div>
+  <div class="swts" id="acs">${AC.map(([n,h])=>`<button class="swt ${(S.settings.accent||"")===h?"on":""}" data-ac="${h}" title="${n}" aria-label="${n}" style="background:${h||THEME_ACC[cur]||"#1bd96a"}"></button>`).join("")}<label class="swt cust ${S.settings.accent&&!AC.some(a=>a[1]===S.settings.accent)?"on":""}" title="Custom color"><input type="color" id="acc" aria-label="Custom accent color" value="${S.settings.accent||THEME_ACC[cur]||"#1bd96a"}"></label></div>
+  <div class="note" style="margin-top:6px">${S.settings.accent?`Accent: ${esc(S.settings.accent)}`:"Accent: theme default"}</div>`;
+  p.querySelectorAll("[data-th]").forEach(b=>b.onclick=async()=>{const t=b.dataset.th;S.settings.theme=t;applyTheme(t);FX.sync();S.settings=await api("/settings","POST",{theme:t});pAppearance(p)});
+  const anT=async()=>{const v=S.settings.animations===false;S.settings.animations=v;applyLook();try{S.settings=await api("/settings","POST",{animations:v})}catch(e){toast(e.message,4000)}pAppearance(p)};
+  $("#an").onclick=anT;$("#an").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();anT()}};
   const hcT=async()=>{const v=!S.settings.high_contrast;S.settings.high_contrast=v;applyLook();try{S.settings=await api("/settings","POST",{high_contrast:v})}catch(e){toast(e.message,4000)}pAppearance(p)};
   $("#hc").onclick=hcT;$("#hc").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();hcT()}};
   const setAcc=async hex=>{S.settings.accent=hex;applyAccent(hex);try{S.settings=await api("/settings","POST",{accent:hex})}catch(e){toast(e.message,4000)}pAppearance(p)};
@@ -1852,7 +2050,13 @@ function pLaunch(p){
   <div class="field"><label class="l">Default memory (MB)</label><input type="text" id="lm" value="${esc(s.memory||4096)}"></div>
   <div class="field"><label class="l">Java (optional)</label><input type="text" id="lj" value="${esc(s.java_path)}" placeholder="Leave blank: Orbit downloads the Java this version needs"><div class="note">Path to java.exe / javaw.exe (Windows) or java (Linux) if you'd rather use your own.</div></div>
   <div class="field"><label class="l">Extra Java arguments (all instances)</label><input type="text" id="la" value="${esc(s.jvm_args)}"></div>
-  <button class="btn brand" id="lv">Save</button>`;
+  <button class="btn brand" id="lv">Save</button>
+  <h3 style="margin-top:26px">Closing Orbit</h3><div class="d">Closing Orbit always shuts down the games and servers it started. Servers warn their players in-game first.</div>
+  <div class="tgl" id="cw" role="switch" tabindex="0" aria-checked="${s.close_warning!==false}">Warn before closing Orbit: ${s.close_warning!==false?"On":"Off"}<span class="sw ${s.close_warning!==false?"on":""}"></span></div>
+  <div class="field" style="margin-top:12px"><label class="l" for="ct">Close button delay (seconds)</label><input type="text" inputmode="numeric" id="ct" maxlength="3" value="${esc(s.close_timer!=null?s.close_timer:5)}" ${s.close_warning===false?"disabled":""}><div class="note">The warning's Close button stays disabled for this long. 0 means no wait (0 to 120).</div></div>`;
+  const cwT=async()=>{const v=S.settings.close_warning===false;try{S.settings=await api("/settings","POST",{close_warning:v})}catch(e){toast(e.message,4000)}pLaunch(p)};
+  $("#cw").onclick=cwT;$("#cw").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();cwT()}};
+  $("#ct").onchange=async e=>{const n=Math.max(0,Math.min(120,parseInt(e.target.value,10)||0));try{S.settings=await api("/settings","POST",{close_timer:n});toast("Saved")}catch(er){toast(er.message,6000)}pLaunch(p)};
   $("#lv").onclick=async()=>{try{S.settings=await api("/settings","POST",{username:$("#lu").value,memory:$("#lm").value,java_path:$("#lj").value,jvm_args:$("#la").value});toast("Saved");pLaunch(p)}catch(e){toast(e.message,6000)}};
 }
 function pCF(p){

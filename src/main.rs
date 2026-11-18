@@ -22,6 +22,7 @@ mod util;
 
 use std::collections::HashMap;
 use std::io::Read;
+use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 #[cfg(feature = "gui")]
 use tao::dpi::LogicalSize;
 #[cfg(feature = "gui")]
@@ -86,6 +87,21 @@ fn handle(mut req: tiny_http::Request, token: &str) {
         match serde_json::from_slice(&raw) { Ok(v) => v, Err(_) => return err(req, 400, "bad JSON") }
     };
 
+    // Closing Orbit: what is still running (for the warning) and the clean shutdown itself.
+    if path.starts_with("/api/app/") {
+        return match (method.as_str(), path) {
+            ("GET", "/api/app/running") => {
+                let inst: Vec<String> = launcher::running().as_object().map(|m| m.keys().cloned().collect()).unwrap_or_default();
+                respond(req, 200, serde_json::json!({"instances": inst, "servers": servers::running_names()}).to_string().into_bytes(), "application/json")
+            }
+            ("POST", "/api/app/quit") => {
+                respond(req, 200, b"{\"ok\":true}".to_vec(), "application/json");
+                begin_quit();
+            }
+            _ => err(req, 404, "not found"),
+        };
+    }
+
     let task = body["task"].as_str().filter(|t| !t.is_empty()).map(|t| t.chars().take(40).collect::<String>());
     let r = api::Req { method: &method, path, q, body, raw, task };
     // A panic in one handler must not take the whole app down.
@@ -99,6 +115,29 @@ fn handle(mut req: tiny_http::Request, token: &str) {
         },
         Err(_) => err(req, 500, "internal error"),
     }
+}
+
+static SHUTTING: AtomicBool = AtomicBool::new(false);
+
+/// Anything Orbit started that is still running: games (or installs) and servers.
+#[cfg_attr(not(feature = "gui"), allow(dead_code))]
+fn app_busy() -> bool {
+    launcher::running().as_object().map(|m| !m.is_empty()).unwrap_or(false) || !servers::running_names().is_empty()
+}
+
+/// Clean shutdown, then exit: games get a close request, servers get the in-game warning and a `stop` (all in parallel),
+/// and anything that won't go is killed. Safe to call more than once.
+fn begin_quit() {
+    if SHUTTING.swap(true, SeqCst) { return; }
+    std::thread::spawn(|| {
+        let a = std::thread::spawn(servers::shutdown_all);
+        let b = std::thread::spawn(launcher::stop_all);
+        let _ = a.join();
+        let _ = b.join();
+        std::thread::sleep(std::time::Duration::from_millis(1500));   // lets the launcher record the play time
+        log_line("closed after a clean shutdown");
+        std::process::exit(0);
+    });
 }
 
 /// Where startup problems are written (the release build has no console to print to).
@@ -210,6 +249,16 @@ const WINDOW_API: &str = r#"(function(){
 #[derive(Debug)]
 enum Ui { Call(String) }
 
+/// The window was asked to close. Nothing running: close. Otherwise the page shows the warning (`window.__orbitClose`)
+/// and later calls /api/app/quit; if the page can't answer, shut down straight away.
+#[cfg(feature = "gui")]
+fn request_close(webview: &wry::WebView, flow: &mut ControlFlow) {
+    if SHUTTING.load(SeqCst) { return; }
+    if !app_busy() { *flow = ControlFlow::Exit; return; }
+    let js = "(function(){if(window.__orbitClose){window.__orbitClose();return true}return false})()";
+    if webview.evaluate_script_with_callback(js, |r| { if r.trim() != "true" { begin_quit(); } }).is_err() { begin_quit(); }
+}
+
 #[cfg(feature = "gui")]
 fn webview_failed(e: &str) -> String {
     if cfg!(windows) {
@@ -254,12 +303,12 @@ fn run_window(url: String) -> Result<(), String> {
     event_loop.run(move |event, _, flow| {
         *flow = ControlFlow::Wait;
         match event {
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *flow = ControlFlow::Exit,
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => request_close(&webview, flow),
             Event::UserEvent(Ui::Call(msg)) => {
                 let v: serde_json::Value = serde_json::from_str(&msg).unwrap_or_default();
                 let reply = match v["m"].as_str().unwrap_or("") {
                     "minimize" => { window.set_minimized(true); serde_json::Value::Null }
-                    "close" => { *flow = ControlFlow::Exit; serde_json::Value::Null }
+                    "close" => { request_close(&webview, flow); serde_json::Value::Null }
                     "toggle_max" => { let m = !window.is_maximized(); window.set_maximized(m); serde_json::json!(m) }
                     "is_max" => serde_json::json!(window.is_maximized()),
                     // Hands the drag to Windows itself, so the snap assist, edge-snapping and "pull a maximised window down" all work.

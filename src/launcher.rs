@@ -408,6 +408,28 @@ pub fn stop(iid: &str) -> Res<()> {
     Ok(())
 }
 
+/// Closes every game Orbit started (Orbit itself is closing). Asks first so Minecraft can save its world: SIGTERM on
+/// Linux / macOS, a normal close-window request on Windows. Whatever is still open after 20 s is killed.
+pub fn stop_all() {
+    let ids: Vec<String> = PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).keys().cloned().collect();
+    let hs: Vec<_> = ids.into_iter().map(|id| std::thread::spawn(move || close_game(&id))).collect();
+    for h in hs { let _ = h.join(); }
+}
+
+fn close_game(iid: &str) {
+    let pid = match PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).get(iid) { Some(c) => c.id(), None => return };
+    #[cfg(unix)] { let _ = Command::new("kill").arg("-TERM").arg(pid.to_string()).status(); }
+    #[cfg(windows)] {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("taskkill").arg("/PID").arg(pid.to_string()).creation_flags(0x08000000).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    for _ in 0..40 {
+        std::thread::sleep(Duration::from_millis(500));
+        if PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).get(iid).is_none() { return; }
+    }
+    if let Some(c) = PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).get_mut(iid) { let _ = c.kill(); }
+}
+
 fn add_play(root: &Path, secs: f64) {
     let mut inst = Instance::open(root);
     inst.state["last_played"] = json!(store::now());

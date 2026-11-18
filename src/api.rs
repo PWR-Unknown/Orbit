@@ -148,10 +148,13 @@ fn settings(r: &Req) -> Res {
         if let Some(k) = b.get("cf_key").and_then(|v| v.as_str()) { st.insert("cf_key".into(), json!(k.trim())); VCACHE.lock().unwrap().clear(); }
         if let Some(t) = b["theme"].as_str().filter(|t| THEMES.contains(t)) { st.insert("theme".into(), json!(t)); }
         if let Some(c) = b["accent"].as_str() {
-            // "" = Orbit's default green; otherwise a #rrggbb colour
+            // "" = the active theme's own accent; otherwise a #rrggbb colour
             if c.is_empty() || (c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|h| h.is_ascii_hexdigit())) { st.insert("accent".into(), json!(c)); }
         }
         if let Some(h) = b["high_contrast"].as_bool() { st.insert("high_contrast".into(), json!(h)); }
+        if let Some(w) = b["close_warning"].as_bool() { st.insert("close_warning".into(), json!(w)); }
+        if let Some(n) = b["close_timer"].as_i64() { st.insert("close_timer".into(), json!(n.clamp(0, 120))); }
+        if let Some(a) = b["animations"].as_bool() { st.insert("animations".into(), json!(a)); } // theme animations on/off
         // minutes east of UTC, reported by the window; the daily server restart uses it to read the local clock
         if let Some(o) = b["tz_offset"].as_i64().filter(|o| (-840..=840).contains(o)) { st.insert("tz_offset".into(), json!(o)); }
         let mut accts = accounts(&st);
@@ -224,6 +227,8 @@ fn settings(r: &Req) -> Res {
         "tl_is_default": g("tlauncher_dir").is_empty(), "is_default": g("instances_dir").is_empty(),
         "theme": st.get("theme").cloned().unwrap_or(json!("oled")), "moved": moved,
         "accent": g("accent"), "high_contrast": st.get("high_contrast").and_then(|v| v.as_bool()).unwrap_or(false),
+        "close_warning": store::close_warning(), "close_timer": store::close_timer(),
+        "animations": st.get("animations").and_then(|v| v.as_bool()).unwrap_or(true),
         "mr_dir": store::mr_root().to_string_lossy(), "mr_default": store::default_modrinth_dir().to_string_lossy(),
         "mr_is_default": g("modrinth_dir").is_empty(),
         "cfa_dir": store::cfapp_root().to_string_lossy(), "cfa_default": store::default_curseforge_dir().to_string_lossy(),

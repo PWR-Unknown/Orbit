@@ -357,6 +357,14 @@ pub fn live_status(name: &str, root: &Path) -> Value {
     st
 }
 
+/// `status` for the Servers overview: a running server also reports `players` / `max_players` (online/max), but never
+/// the player names. Stopped or still-starting servers open no socket.
+fn list_status(name: &str, root: &Path) -> Value {
+    let mut st = live_status(name, root);
+    if let Some(o) = st.as_object_mut() { o.remove("player_names"); }
+    st
+}
+
 fn kill_tree(pid: u32) {
     let mut c;
     if WIN {
@@ -608,7 +616,7 @@ fn summary(root: &Path) -> Value {
            "loader_version": s(&cfg, "loader_version"), "content": kind, "count": count, "ram": ram, "ram_default": ram.is_none(),
            "port": port, "motd": props.get("motd").and_then(|v| v.as_str()).unwrap_or(""),
            "max_players": props.get("max-players").and_then(|v| v.as_str()).unwrap_or(""),
-           "created": cfg["created"].as_bool().unwrap_or(false), "proxy": info.proxy, "status": status(&name, root), "eula": eula_state(root)})
+           "created": cfg["created"].as_bool().unwrap_or(false), "proxy": info.proxy, "status": list_status(&name, root), "eula": eula_state(root)})
 }
 
 pub fn list_servers() -> Res {
@@ -1084,29 +1092,39 @@ pub fn start_scheduler() {
     });
 }
 
-/// Counts down in the server chat (`say`), then stops the server and starts it again. Stopping the server by hand
-/// during the countdown cancels the restart.
-fn scheduled_restart(name: &str, run: Arc<Run>, countdown: i64) {
+/// Counts down in the server chat with `say` ("Server <what> in 5 minutes", "... in 30 seconds", ...) and then waits out the
+/// last mark. Shared by the scheduled restart and by the shutdown when Orbit closes, so players get the same kind of
+/// warning either way. Returns false if the server went away meanwhile (or, with `cancel_on_stop`, was stopped by hand,
+/// which cancels a restart).
+fn say_countdown(name: &str, run: &Run, countdown: i64, what: &str, cancel_on_stop: bool) -> bool {
     let proxy = server_root(name).map(|r| detect_egg(&r) == "velocity").unwrap_or(false);   // proxies have no `say`
     let say = |text: String| { if !proxy { let _ = send_command(name, &format!("say {text}")); } };
     let wait = |secs: i64| -> bool {
         for _ in 0..secs.max(0) {
             std::thread::sleep(Duration::from_secs(1));
-            if !run.alive.load(Relaxed) || run.stopping.load(Relaxed) { return false; }
+            if !run.alive.load(Relaxed) || (cancel_on_stop && run.stopping.load(Relaxed)) { return false; }
         }
         true
     };
     let mut marks: Vec<i64> = [300, 120, 60, 30, 10, 5, 4, 3, 2, 1].into_iter().filter(|m| *m < countdown).collect();
     if countdown > 0 { marks.insert(0, countdown); }
-    run.add(format!("[Orbit] Scheduled restart in {countdown} s."));
     let mut left = countdown;
     for m in marks {
-        if !wait(left - m) { return; }
+        if !wait(left - m) { return false; }
         left = m;
-        say(if m >= 60 && m % 60 == 0 { format!("Server restarting in {} minute{}.", m / 60, if m == 60 { "" } else { "s" }) }
-            else { format!("Server restarting in {m} second{}.", if m == 1 { "" } else { "s" }) });
+        say(if m >= 60 && m % 60 == 0 { format!("Server {what} in {} minute{}.", m / 60, if m == 60 { "" } else { "s" }) }
+            else { format!("Server {what} in {m} second{}.", if m == 1 { "" } else { "s" }) });
     }
-    if !wait(left) { return; }
+    wait(left)
+}
+
+/// Counts down in the server chat (`say`), then stops the server and starts it again. Stopping the server by hand
+/// during the countdown cancels the restart.
+fn scheduled_restart(name: &str, run: Arc<Run>, countdown: i64) {
+    let proxy = server_root(name).map(|r| detect_egg(&r) == "velocity").unwrap_or(false);   // proxies have no `say`
+    let say = |text: String| { if !proxy { let _ = send_command(name, &format!("say {text}")); } };
+    run.add(format!("[Orbit] Scheduled restart in {countdown} s."));
+    if !say_countdown(name, &run, countdown, "restarting", true) { return; }
     say("Restarting now. Back in a moment!".into());
     std::thread::sleep(Duration::from_secs(1));
     if stop(name, false).is_err() { return; }
@@ -1118,6 +1136,47 @@ fn scheduled_restart(name: &str, run: Arc<Run>, countdown: i64) {
     match start_when_free(name) {
         Ok(_) => {}
         Err(e) => { if let Some(r) = run_of(name) { r.add(format!("[Orbit] Scheduled restart couldn't start the server: {e}")); } }
+    }
+}
+
+// ---------------------------------------------------------------- closing Orbit
+
+/// How long players are warned before a server is stopped because Orbit is closing.
+const CLOSE_WARN_SECS: i64 = 10;
+
+/// Servers Orbit itself is running (any state). Servers started outside Orbit are not ours to stop.
+pub fn running_names() -> Vec<String> {
+    let mut v: Vec<String> = RUNS.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
+        .map(|m| m.iter().filter(|(_, r)| r.alive.load(Relaxed)).map(|(k, _)| k.clone()).collect()).unwrap_or_default();
+    v.sort_by_key(|n| n.to_lowercase());
+    v
+}
+
+/// Stops every server Orbit is running, all at once. Each one that is up and may have players on gets the in-game
+/// shutdown warning first (the same `say` countdown as the scheduled restart); a server that won't stop in time is killed.
+pub fn shutdown_all() {
+    let hs: Vec<_> = running_names().into_iter().map(|n| std::thread::spawn(move || shutdown_one(&n))).collect();
+    for h in hs { let _ = h.join(); }
+}
+
+fn shutdown_one(name: &str) {
+    let Some(run) = run_of(name).filter(|r| r.alive.load(Relaxed)) else { return };
+    let Ok(root) = server_root(name) else { return };
+    if run.ready.load(Relaxed) && !run.stopping.load(Relaxed) {
+        // nobody on it (a successful ping that says 0) needs no warning; if the ping fails, warn to be safe
+        let nobody = live_status(name, &root)["players"].as_i64() == Some(0);
+        if !nobody {
+            run.add(format!("[Orbit] Orbit is closing: stopping this server in {CLOSE_WARN_SECS} s."));
+            if !say_countdown(name, &run, CLOSE_WARN_SECS, "shutting down", false) { return; }
+            let _ = send_command(name, "say Shutting down now. See you soon!");
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    }
+    if !run.stopping.load(Relaxed) { let _ = stop(name, false); }
+    if !wait_stopped(name, &root, stop_timeout() + 15) {
+        run.add("[Orbit] The server didn't stop in time, closing it.");
+        let _ = stop(name, true);
+        wait_stopped(name, &root, 10);
     }
 }
 
