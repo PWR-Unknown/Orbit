@@ -1022,8 +1022,7 @@ fn tz_offset_secs() -> Option<i64> {
     None
 }
 
-/// "+0530" / "-0800" -> seconds east of UTC. (Only called on unix; Windows gets the offset from the UI.)
-#[cfg(any(unix, test))]
+/// "+0530" / "-0800" -> seconds east of UTC.
 fn parse_zone(z: &str) -> Option<i64> {
     if z.len() != 5 || !z.is_char_boundary(1) { return None; }
     let sign = match &z[..1] { "+" => 1, "-" => -1, _ => return None };
@@ -1300,7 +1299,7 @@ pub fn search_content(name: &str, q: &HashMap<String, String>) -> Res {
     let mut facets = content_facets(&ptype, &loaders, mc.as_deref());
     if ptype != "plugin" { facets.push(vec!["server_side:required".into(), "server_side:optional".into()]); }
     let page = page_of(q);
-    let res = crate::mods::api_get("/search", &search_params(q, &facets, 20, page, sort_index(q, "relevance")))?;
+    let res = crate::modrinth::api_get("/search", &search_params(q, &facets, 20, page, sort_index(q, "relevance")))?;
     let items = read_content(&root)["items"].clone();
     let have: HashSet<String> = items.as_object().into_iter().flatten().map(|(_, m)| s(m, "slug").to_string()).collect();
     let hits: Vec<Value> = res["hits"].as_array().into_iter().flatten().map(|h| json!({
@@ -1314,16 +1313,16 @@ pub fn search_content(name: &str, q: &HashMap<String, String>) -> Res {
 
 fn best(project: &str, mc: Option<&str>, loaders: &[&str]) -> Res<Option<Value>> {
     let mut p: Vec<(&str, String)> = vec![];
-    if !loaders.is_empty() { p.push(("loaders", crate::mods::jl(loaders))); }
-    if let Some(m) = mc { p.push(("game_versions", crate::mods::jl(&[m]))); }
-    let vs = crate::mods::api_get(&format!("/project/{project}/version"), &p)?;
+    if !loaders.is_empty() { p.push(("loaders", crate::modrinth::jl(loaders))); }
+    if let Some(m) = mc { p.push(("game_versions", crate::modrinth::jl(&[m]))); }
+    let vs = crate::modrinth::api_get(&format!("/project/{project}/version"), &p)?;
     let Some(a) = vs.as_array().filter(|a| !a.is_empty()) else { return Ok(None) };
     Ok(Some(a.iter().find(|v| v["version_type"] == "release").unwrap_or(&a[0]).clone()))
 }
 
 fn install_content_item(root: &Path, d: &Path, project: &str, loaders: &[&str], mc: Option<&str>, explicit: bool,
                         seen: &mut HashSet<String>, log: &mut Log) -> Res<()> {
-    let meta = crate::mods::api_get(&format!("/project/{project}"), &[])?;
+    let meta = crate::modrinth::api_get(&format!("/project/{project}"), &[])?;
     if meta.is_null() { log.push(format!("  ! {project} wasn't found on Modrinth")); return Ok(()); }
     let (id, title) = (s(&meta, "id").to_string(), s(&meta, "title").to_string());
     if !seen.insert(id.clone()) { return Ok(()); }
@@ -1344,7 +1343,7 @@ fn install_content_item(root: &Path, d: &Path, project: &str, loaders: &[&str], 
         let mut pid = dep["project_id"].as_str().map(String::from);
         if pid.is_none() {
             if let Some(vid) = dep["version_id"].as_str() {
-                pid = crate::mods::api_get(&format!("/version/{vid}"), &[])?["project_id"].as_str().map(String::from);
+                pid = crate::modrinth::api_get(&format!("/version/{vid}"), &[])?["project_id"].as_str().map(String::from);
             }
         }
         if let Some(p) = pid { install_content_item(root, d, &p, loaders, mc, false, seen, log)?; }
@@ -1466,7 +1465,7 @@ pub fn discover_search(q: &HashMap<String, String>) -> Res {
     if ptype == "mod" { facets.push(vec!["server_side:required".into(), "server_side:optional".into()]); }
     facets.extend(cats.iter().map(|c| vec![format!("categories:{c}")]));
     let limit = q.get("limit").and_then(|l| l.parse::<usize>().ok()).unwrap_or(20).clamp(1, 50);
-    let res = crate::mods::api_get("/search", &search_params(q, &facets, limit, page_of(q), sort_index(q, "relevance")))?;
+    let res = crate::modrinth::api_get("/search", &search_params(q, &facets, limit, page_of(q), sort_index(q, "relevance")))?;
     let items = read_content(&root)["items"].clone();
     let have: HashSet<String> = items.as_object().into_iter().flatten().map(|(_, m)| s(m, "slug").to_string()).collect();
     let mut hits: Vec<Value> = res["hits"].as_array().into_iter().flatten().map(|h| {
@@ -1502,14 +1501,14 @@ pub fn link_content(name: &str) -> Res {
     let lookup = || -> Res<(Map<String, Value>, HashMap<String, Value>)> {
         let mut found = Map::new();
         for ch in hashes.chunks(200) {
-            if let Some(o) = crate::mods::api_post("/version_files", &json!({"hashes": ch, "algorithm": "sha1"}))?.as_object() { found.extend(o.clone()); }
+            if let Some(o) = crate::modrinth::api_post("/version_files", &json!({"hashes": ch, "algorithm": "sha1"}))?.as_object() { found.extend(o.clone()); }
         }
         let mut pids: Vec<String> = found.values().filter_map(|v| v["project_id"].as_str().map(String::from)).collect();
         pids.sort();
         pids.dedup();
         let mut projects = HashMap::new();
         for ch in pids.chunks(100) {
-            for p in crate::mods::api_get("/projects", &[("ids", crate::mods::jl(ch))])?.as_array().into_iter().flatten() {
+            for p in crate::modrinth::api_get("/projects", &[("ids", crate::modrinth::jl(ch))])?.as_array().into_iter().flatten() {
                 if let Some(id) = p["id"].as_str() { projects.insert(id.to_string(), p.clone()); }
             }
         }
@@ -1592,7 +1591,7 @@ fn apply_pack(root: &Path, info: &mods::PackInfo, log: &mut Log) -> Res<()> {
         let rel = s(fe, "path");
         let target = util::safe_join(root, rel)?;
         let urls: Vec<&str> = fe["downloads"].as_array().into_iter().flatten().filter_map(|u| u.as_str())
-            .filter(|u| crate::mods::MRPACK_HOSTS.contains(&util::host_of(u).as_str())).collect();
+            .filter(|u| crate::modrinth::MRPACK_HOSTS.contains(&util::host_of(u).as_str())).collect();
         if urls.is_empty() { return err(format!("No allowed download source for {rel}.")); }
         let h = &fe["hashes"];
         let algo = if h.get("sha512").is_some() { Some("sha512") } else if h.get("sha1").is_some() { Some("sha1") } else { None };
@@ -1669,7 +1668,7 @@ pub fn search_packs(q: &HashMap<String, String>) -> Res {
         vec!["server_side:required".into(), "server_side:optional".into()]];
     if let Some(m) = q.get("mc").filter(|m| !m.is_empty()) { facets.push(vec![format!("versions:{m}")]); }
     let idx = if q.get("q").map(|t| !t.is_empty()).unwrap_or(false) { "relevance" } else { "downloads" };
-    let res = crate::mods::api_get("/search", &search_params(q, &facets, 15, page, idx.into()))?;
+    let res = crate::modrinth::api_get("/search", &search_params(q, &facets, 15, page, idx.into()))?;
     let hits: Vec<Value> = res["hits"].as_array().into_iter().flatten().map(|h| json!({
         "key": h["project_id"], "ident": h["slug"], "title": h["title"], "author": h["author"].as_str().unwrap_or(""),
         "description": h["description"], "downloads": h["downloads"], "icon_url": h["icon_url"],

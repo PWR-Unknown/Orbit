@@ -44,10 +44,8 @@ serde_yaml = "0.9"                                                           # p
 winresource = "0.1"
 
 [profile.release]
-opt-level = "z"
+opt-level = "s"
 lto = true
-codegen-units = 1
 strip = true
-# Kept as "unwind" on purpose: src/main.rs wraps every request handler (and the app itself) in
-# catch_unwind so one bad request can't kill the launcher. panic = "abort" would turn those into crashes.
-panic = "unwind"
+codegen-units = 1
+panic = "unwind"   # a panic in one request handler must not take the app down

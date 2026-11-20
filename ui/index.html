@@ -54,11 +54,10 @@ html[data-theme=aurora]::after{inset:0 0 35% 0;opacity:.22;background:repeating-
 @keyframes xcurt{0%{background-position:0 0;transform:skewX(-6deg) scaleY(1)}50%{transform:skewX(5deg) scaleY(1.12);opacity:.3}100%{background-position:260px 0;transform:skewX(-3deg) scaleY(.95)}}
 /* animation toggle (Settings > Appearance) turns every theme animation off */
 html[data-anim=off]::before,html[data-anim=off]::after,html[data-anim=off] body::before,html[data-anim=off] h1,html[data-anim=off] h2,html[data-anim=off] h3,html[data-anim=off] .snav button.on,html[data-anim=off] .wm,html[data-anim=off] .inst:hover,html[data-anim=off] .scard:hover,html[data-anim=off] #main{animation:none!important}
-html[data-paused] #fx{display:none!important}
 html[data-anim=off] #fx{display:none!important}
-html[data-paused] *,html[data-paused] *::before,html[data-paused] *::after{animation-play-state:paused!important}
 html[data-anim=off] *,html[data-anim=off] *::before,html[data-anim=off] *::after{animation:none!important;transition:none!important}
 /* app minimized / unfocused: freeze every running animation */
+html[data-paused] *,html[data-paused] *::before,html[data-paused] *::after{animation-play-state:paused!important}
 /* interactive canvas overlay (Christmas / Halloween, Home + Servers only); the CSS snow layer steps aside while it runs */
 #fx{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:2;display:none}
 html[data-fx=on][data-theme^=christmas]::before{display:none}
@@ -237,11 +236,6 @@ select.sel{background:var(--btn);color:var(--head);border:0;border-radius:12px;p
 .accbtn{display:flex;align-items:center;gap:12px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 12px;cursor:pointer;text-align:left}.accbtn:hover{border-color:var(--green)}
 .av{width:38px;height:38px;border-radius:8px;overflow:hidden;display:block;flex:none}.av svg{width:100%;height:100%;display:block;image-rendering:pixelated}
 .accbox.open{background:var(--card);border:1px solid var(--line);border-radius:14px}.accbox.open .accbtn{border:0;background:none}
-.pw{gap:8px;flex-wrap:wrap;justify-content:flex-end}.pw .btn[data-more],.pw .btn[data-stopx]{min-width:0}
-.pttotal{display:grid;gap:2px;padding:14px 16px;border-radius:12px;background:var(--card2);margin-top:12px}.pttotal b{font-size:28px;color:var(--head)}
-.ptrow{padding:10px 12px;border-radius:12px;background:var(--card2);margin-top:8px;cursor:pointer}.ptrow.gone{opacity:.78}.pthead{display:flex;gap:12px;align-items:center}.ptt{color:var(--head);white-space:nowrap}
-.ptbar{height:4px;border-radius:2px;background:var(--line);margin-top:8px;overflow:hidden}.ptbar i{display:block;height:100%;background:var(--green)}
-.ptsess{margin-top:8px;display:grid;gap:4px;font-size:13px}.ptsess>div{display:flex;gap:12px;justify-content:space-between}
 .acclist{padding:0 8px 8px}.accrow{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:10px;cursor:pointer}.accrow:hover{background:var(--card2)}.accrow b{color:var(--head)}
 .rad{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--mut);display:grid;place-items:center;flex:none}.rad.on{border-color:var(--green)}.rad.on::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--green)}
 .accadd{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:6px;border:0;border-radius:12px;background:var(--card2);color:var(--text);padding:12px;font-weight:600;cursor:pointer}.accadd:hover{background:var(--btn);color:var(--head)}
@@ -431,7 +425,7 @@ const mq=matchMedia("(prefers-color-scheme: light)");
 function applyTheme(t){const real=t==="system"?(mq.matches?"light":"dark"):t;document.documentElement.dataset.theme=real;applyAccent(S.settings&&S.settings.accent)}
 /* the daily server restart needs the local clock; the window reports its UTC offset (minutes east) */
 function reportTz(){api("/settings","POST",{tz_offset:-new Date().getTimezoneOffset()}).catch(()=>{})}
-function applyLook(){const R=document.documentElement;if(S.settings.high_contrast)R.dataset.contrast="high";else delete R.dataset.contrast;R.dataset.anim=(S.settings.animations===false||window.__orbPaused)?"off":"on";applyTheme(S.settings.theme||"oled");FX.sync()}
+function applyLook(){const R=document.documentElement;if(S.settings.high_contrast)R.dataset.contrast="high";else delete R.dataset.contrast;R.dataset.anim=S.settings.animations===false?"off":"on";applyTheme(S.settings.theme||"oled");FX.sync()}
 /* accent colour: fills use the colour as picked; text in the accent colour is nudged until it is readable on the current theme (7:1 in high contrast) */
 const hexRGB=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16)),rgbHex=a=>"#"+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
 const mixHex=(h,t,a)=>{const x=hexRGB(h),y=hexRGB(t);return rgbHex(x.map((v,i)=>v+(y[i]-v)*a))};
@@ -457,9 +451,8 @@ mq.addEventListener&&mq.addEventListener("change",()=>{if(S.settings.theme==="sy
 const FX=(()=>{
   const R=document.documentElement,cv=document.createElement("canvas"),cx=cv.getContext("2d");
   cv.id="fx";cv.setAttribute("aria-hidden","true");document.body.appendChild(cv);
-  const COL=4,CS=5,WEB_SECS=150,rnd=(a,b)=>a+Math.random()*(b-a);
-  let gmax=34,cmax=8,tmax=6.5,spd=1;   /* snow limits + fall speed; set from Settings by cfg() */
-  let W=0,H=0,mode=null,fam=null,dark=true,raf=0,last=0,t=0,frame=0,flakes=[],puffs=[],ground=new Float32Array(0),cards=[],cardSnow=new Map(),surfs=[],slabs=[],chunks=[],treeS=[],mainR=null,motes=[],webT0=0,glOn=false,glT=0;
+  const COL=4,CS=5,GBASE=3,GMAX=34,CMAX=8,WEB_SECS=150,rnd=(a,b)=>a+Math.random()*(b-a);
+  let W=0,H=0,mode=null,fam=null,dark=true,raf=0,last=0,t=0,frame=0,flakes=[],puffs=[],ground=new Float32Array(0),cards=[],cardSnow=new WeakMap(),mainR=null,motes=[],webT0=0,glOn=false,glT=0;
   const M={x:-999,y:-999,vx:0,vy:0,down:false,in:false};
   const blocked=()=>{const o=document.getElementById("over");return !!(o&&o.childElementCount)};
 
@@ -470,126 +463,44 @@ const FX=(()=>{
   addEventListener("mousedown",e=>{if(e.button===0)M.down=true});addEventListener("mouseup",()=>{M.down=false});
   document.addEventListener("mouseleave",()=>{M.in=false;M.down=false});addEventListener("blur",()=>{M.in=false;M.down=false});
 
-  /* the boxes snow can settle on (instance cards, server cards, Jump in rows, panels), clipped to the scrolling area.
-     Each box's snow lives under a stable key, not its DOM node, so it survives Home / Servers redrawing their lists. */
-  const SNOWSEL=[".inst",".lcard",".scard",".jrow",".card",".shero",".accbox.open"];
-  function refreshCards(){const m=document.getElementById("main");if(!m)return;mainR=m.getBoundingClientRect();cards=[];if(fam!=="christmas")return;
-    const cnt={},all=SNOWSEL.map(q=>"#main "+q).join(",");
-    document.querySelectorAll(all).forEach(el=>{
-      if(el.parentElement&&el.parentElement.closest(all))return;   /* only the outermost box of a nest */
-      const b=el.getBoundingClientRect(),sc=el.closest(".dcol,.fcol")||m,sr=sc.getBoundingClientRect();
-      if(b.width<60||b.height<20||b.top<Math.max(sr.top,mainR.top)||b.top>Math.min(sr.bottom,mainR.bottom)-6)return;
-      const kb=S.page+"|"+SNOWSEL.find(q=>el.matches(q))+"|"+(el.dataset.id||el.dataset.n||"");cnt[kb]=(cnt[kb]||0)+1;
-      const key=kb+"|"+cnt[kb],n=Math.ceil(b.width/CS)+1;let st=cardSnow.get(key);
-      if(!st){st={sn:new Float32Array(n),cool:0,rt:-99,rl:0,rr:0};cardSnow.set(key,st)}
-      else if(st.sn.length!==n){const o=st.sn,ns=new Float32Array(n);for(let i=0;i<n;i++)ns[i]=o[Math.min(o.length-1,Math.round(i*(o.length-1)/Math.max(1,n-1)))]||0;st.sn=ns}
-      st.seen=frame;
-      if(frame-st.rt>45){const cs=getComputedStyle(el);st.rl=parseFloat(cs.borderTopLeftRadius)||0;st.rr=parseFloat(cs.borderTopRightRadius)||0;st.rt=frame}
-      const c={l:b.left,r:b.right,top:b.top,w:b.width,sn:st.sn,st,max:cmax,rl:Math.min(st.rl,b.width/2),rr:Math.min(st.rr,b.width/2)};
-      c.y=x=>edgeY(c,x);cards.push(c)});
-    if(frame%120===0)for(const[k,v]of cardSnow)if(frame-v.seen>900)cardSnow.delete(k)}
+  /* the cards snow can settle on, clipped to the scrolling area */
+  function refreshCards(){const m=document.getElementById("main");if(!m)return;mainR=m.getBoundingClientRect();cards=[];
+    document.querySelectorAll("#main .inst,#main .scard,#main .jrow").forEach(el=>{const b=el.getBoundingClientRect();if(b.width<60||b.top<mainR.top||b.top>mainR.bottom-6)return;
+      const n=Math.ceil(b.width/CS)+1;let s=cardSnow.get(el);if(!s||s.length!==n){s=new Float32Array(n);cardSnow.set(el,s)}cards.push({l:b.left,r:b.right,top:b.top,w:b.width,sn:s})})}
 
   /* ---- Christmas ---- */
   const flake=init=>({x:rnd(0,W),y:init?rnd(-H,H*.4):rnd(-40,-5),r:rnd(1,3),vy:rnd(.5,1.5),ph:rnd(0,6.28),ix:0,iy:0});
   const addSnow=(a,i,v,max)=>{for(let j=-1;j<=1;j++){const k=i+j;if(k>=0&&k<a.length)a[k]=Math.min(max,a[k]+(j?v*.45:v))}};
   const relax=a=>{for(let i=0;i<a.length-1;i++){const d=a[i]-a[i+1];if(Math.abs(d)>1.4){const m=.18*Math.sign(d);a[i]-=m;a[i+1]+=m}}};
   function puff(x,y,n,vx,vy){for(let i=0;i<n&&puffs.length<240;i++)puffs.push({x,y,vx:vx*.25+rnd(-1.6,1.6),vy:vy*.25+rnd(-2.2,.4),r:rnd(1,2.4),a:1})}
-  /* tree tiers as [half width, base y, apex y], top first (the shapes tree() draws) */
-  const TIERS=[[40,-104,-154],[52,-62,-118],[62,-14,-78]];
-  /* y of a box's top edge at x: follows its rounded corners, then droops past the end (for sliding snow) */
-  const edgeY=(c,x)=>{const dl=x-c.l,dr=c.r-x;let y=c.top;
-    if(c.rl>0&&dl<c.rl){const q=c.rl-Math.max(0,dl);y=c.top+c.rl-Math.sqrt(Math.max(0,c.rl*c.rl-q*q))}
-    if(c.rr>0&&dr<c.rr){const q=c.rr-Math.max(0,dr);y=Math.max(y,c.top+c.rr-Math.sqrt(Math.max(0,c.rr*c.rr-q*q)))}
-    return y+(dl<0?-dl*.9:dr<0?-dr*.9:0)};
-  function treeSurfs(x,y,s){const tr=TIERS.map(([hw,by,ay],i)=>{const st=treeS[i]||(treeS[i]={sn:new Float32Array(0),cool:0}),h=hw*s,n=Math.ceil(h*2/CS)+1;
-      if(st.sn.length!==n)st.sn=new Float32Array(n);
-      const ax=y+ay*s,rise=(by-ay)*s;
-      return{l:x-h,r:x+h,sn:st.sn,st,max:tmax,i,hw:h,cx:x,by:y+by*s,y:px=>ax+rise*Math.abs(px-x)/h,tree:true}});
-    tr.forEach(c=>c.tr=tr);return tr}
-  /* the part of a lower tier that sits behind a higher one can't hold snow */
-  const covered=(c,x)=>{const yy=c.y(x);for(let q=0;q<c.i;q++){const u=c.tr[q];if(Math.abs(x-u.cx)<u.hw&&yy>u.y(x)&&yy<u.by)return true}return false};
-  /* what a falling point meets first: a tree tier, a box, or the floor (crossing test, so fast flakes can't tunnel through) */
-  function hit(x,y,py){for(const c of surfs){if(x<c.l||x>c.r||(c.tree&&covered(c,x)))continue;const i=Math.min(c.sn.length-1,((x-c.l)/CS)|0),sf=c.y(x)-c.sn[i];if(y>=sf-1&&py<=sf+3)return{c,i}}
-    const gi=Math.max(0,Math.min(ground.length-1,(x/COL)|0));return y>=H-ground[gi]?{gi}:null}
-  const spread=(a,i,tot,w,max)=>{const per=tot/(2*w+1);for(let j=-w;j<=w;j++){const q=i+j;if(q>=0&&q<a.length)a[q]=Math.min(max,a[q]+per*(1-Math.abs(j)/(w+1)*.6))}};
-  /* a snow layer is drawn as separate runs, only where it has real thickness: no snow = nothing drawn (no stray line) */
-  function layer(n,xa,ha,by,edge,dn){let i=0;
-    while(i<n){if(ha(i)<.25){i++;continue}let j=i;while(j+1<n&&ha(j+1)>=.25)j++;
-      if(j>i){cx.beginPath();for(let q=i;q<=j;q++){const x=xa(q),y=by(x)-ha(q);q===i?cx.moveTo(x,y):cx.lineTo(x,y)}
-        for(let q=j;q>=i;q--){const x=xa(q);cx.lineTo(x,by(x)+(dn!=null?dn:Math.min(1.6,ha(q)*.8)))}cx.closePath();cx.fill();
-        if(edge){cx.strokeStyle=edge;cx.lineWidth=1;cx.beginPath();for(let q=i;q<=j;q++){const x=xa(q),y=by(x)-ha(q)-.5;q===i?cx.moveTo(x,y):cx.lineTo(x,y)}cx.stroke()}}
-      i=j+1}}
-  const capLayer=(c,edge)=>{const s=c.sn,xa=q=>Math.min(c.r,c.l+q*CS);
-    layer(s.length,xa,q=>{const x=xa(q);if(c.tree&&covered(c,x))return 0;return s[q]*Math.max(0,Math.min(1,Math.min(x-c.l,c.r-x)/14))},c.y,edge)};
-  const drawSlab=(b,c,edge)=>layer(b.prof.length,j=>c.l+b.ox+j*CS,j=>b.prof[j],c.y,edge,1.2);
-  const surfOf=b=>surfs.find(c=>c.st===b.st);
-
-  /* snow that got too deep on a card or tree tier breaks loose as a slab, slides toward the nearest edge and drops off */
-  function checkSlide(){
-    for(const c of surfs){const st=c.st;if(!st)continue;if(st.cool>0){st.cool-=15;continue}
-      const s=c.sn,thr=c.max*.8;let im=-1,mv=thr;for(let i=0;i<s.length;i++)if(s[i]>mv){mv=s[i];im=i}
-      if(im<0||slabs.some(q=>q.st===st))continue;
-      const lo=thr*.45;let a=im,z=im;while(a>0&&s[a-1]>lo&&im-a<10)a--;while(z<s.length-1&&s[z+1]>lo&&z-im<10)z++;
-      while(z-a<7&&(a>0||z<s.length-1)){if(a>0)a--;if(z<s.length-1)z++}
-      const prof=new Float32Array(z-a+1),keep=c.max*.08;
-      for(let j=0;j<prof.length;j++){const e=Math.min(1,Math.min(j,prof.length-1-j)/2+.34),take=Math.max(0,s[a+j]-keep)*e;prof[j]=take;s[a+j]-=take}
-      const mid=c.l+(a+z)/2*CS,dir=c.tree?(Math.abs(mid-c.cx)<5?(Math.random()<.5?-1:1):Math.sign(mid-c.cx)):(mid-c.l<(c.r-c.l)/2?-1:1);
-      slabs.push({st,ox:a*CS,w:prof.length*CS,prof,dir,v:.15,acc:c.tree?.09:.035,vmax:c.tree?6:4.5,lastX:mid,lastY:c.y(mid)});
-      st.cool=300;puff(mid,c.y(mid)-mv,5,0,0)}}
-  function shed(b,c){const m=b.prof.reduce((p,v)=>p+v,0)*CS,n=Math.min(3,Math.max(1,Math.ceil(m/45))),ex=b.dir>0?c.r:c.l,ey=c.y(ex);
-    for(let q=0;q<n;q++){const mm=m/n;chunks.push({x:ex+b.dir*(2+q*3),y:ey,vx:b.dir*(b.v*.6+rnd(.2,1.2)),vy:rnd(0,.8),m:mm,r:Math.min(10,2+Math.sqrt(mm)*.4),age:0})}
-    puff(ex,ey,10,b.dir*b.v,0)}
-  function updateSlabs(k){
-    for(let q=slabs.length-1;q>=0;q--){const b=slabs[q],c=surfOf(b);
-      if(!c){puff(b.lastX,b.lastY,8,0,0);slabs.splice(q,1);continue}   /* its box scrolled away or was redrawn: the slab crumbles */
-      b.v=Math.min(b.vmax,b.v+b.acc*k);b.ox+=b.dir*b.v*k;
-      const mid=b.ox+b.w/2;b.lastX=c.l+mid;b.lastY=c.y(b.lastX);
-      if(b.v>.8&&Math.random()<.25*k)puff(b.lastX,b.lastY,1,b.dir*b.v,0);
-      if(b.dir>0?mid>c.r-c.l:mid<0){shed(b,c);slabs.splice(q,1)}}}
-  function updateChunks(k){
-    for(let q=chunks.length-1;q>=0;q--){const p=chunks[q],py=p.y;p.vy+=.22*k;p.vx*=Math.pow(.985,k);p.x+=p.vx*k;p.y+=p.vy*k;
-      if(Math.random()<.3*k)puff(p.x,p.y,1,p.vx,0);
-      const h=p.age++>2?hit(p.x,p.y+p.r*.5,py+p.r*.5):null;
-      if(h){const sz=h.c?CS:COL,w=Math.max(1,Math.round(p.r*1.2/sz));
-        if(h.c)spread(h.c.sn,h.i,p.m/CS,w,h.c.max);else spread(ground,h.gi,p.m/COL,w,gmax);
-        puff(p.x,p.y,6+Math.min(10,p.m/6|0),p.vx,p.vy*.5);chunks.splice(q,1);continue}
-      if(p.y>H+30||p.x<-40||p.x>W+40)chunks.splice(q,1)}}
-
   function christmas(k){
     const want=Math.min(150,Math.round(W/11));while(flakes.length<want)flakes.push(flake(flakes.length<20));
-    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=M.down?95:58,ts=H<520?.6:.9,tr=treeSurfs(W-95,H+3,ts);surfs=[...tr,...cards];
+    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=M.down?95:58;
     for(const f of flakes){
-      f.ph+=.018*k*spd;const py=f.y;f.x+=(Math.sin(f.ph)*.35*spd+f.ix)*k;f.y+=(f.vy*spd+f.iy)*k;f.ix*=Math.pow(.93,k);f.iy*=Math.pow(.93,k);
+      f.ph+=.018*k;const py=f.y;f.x+=(Math.sin(f.ph)*.35+f.ix)*k;f.y+=(f.vy+f.iy)*k;f.ix*=Math.pow(.93,k);f.iy*=Math.pow(.93,k);
       if(act){const dx=f.x-M.x,dy=f.y-M.y,d2=dx*dx+dy*dy;if(d2<(rad+30)*(rad+30)){const d=Math.sqrt(d2)||1,s=1-Math.min(1,d/(rad+30));f.ix+=(dx/d*s*1.6+M.vx*.05*s)*k;f.iy+=(dy/d*s*1.1+M.vy*.05*s)*k}}
-      const h=hit(f.x,f.y,py);if(h){if(h.c)addSnow(h.c.sn,h.i,.5,h.c.max);else addSnow(ground,h.gi,.5,gmax)}
-      if(h||f.y>H+10||f.x<-20||f.x>W+20)Object.assign(f,flake(false));
+      let landed=false;
+      for(const c of cards){if(f.x<c.l+10||f.x>c.r-10)continue;const i=((f.x-c.l)/CS)|0,surf=c.top-c.sn[i];if(f.y>=surf-1&&py<=surf+3){addSnow(c.sn,i,.5,CMAX);landed=true;break}}
+      if(!landed){const gi=Math.max(0,Math.min(ground.length-1,(f.x/COL)|0)),gt=H-GBASE-ground[gi];if(f.y>=gt){addSnow(ground,gi,.5,GMAX);landed=true}}
+      if(landed||f.y>H+10||f.x<-20||f.x>W+20)Object.assign(f,flake(false));
     }
-    /* settle the piles, enforce the height limits, and snap crumbs to exactly 0 */
-    if(frame%6===0){const fix=(a,mx)=>{relax(a);for(let i=0;i<a.length;i++){if(a[i]>mx)a[i]=mx;else if(a[i]<.2)a[i]=0}};fix(ground,gmax);for(const c of surfs)fix(c.sn,c.max)}
-    if(frame%15===0)checkSlide();
+    if(frame%6===0){relax(ground);cards.forEach(c=>relax(c.sn))}
     /* swipe: hovering clears a little, dragging clears everything under the cursor */
     if(act&&(sp>.6||M.down)){
-      const amt=M.down?99:1.2+sp*.45,sub=(a,i)=>{a[i]=a[i]-amt<.2?0:a[i]-amt};
-      for(let i=0;i<ground.length;i++){const x=i*COL,dx=Math.abs(x-M.x);if(dx>rad)continue;const reach=Math.sqrt(rad*rad-dx*dx),top=H-ground[i];
-        if(M.y+reach>top&&ground[i]>0){if(ground[i]>3&&Math.random()<.1)puff(x,top,1,M.vx,M.vy);sub(ground,i)}}
-      for(const c of surfs){const s=c.sn;for(let i=0;i<s.length;i++){const x=c.l+i*CS,dx=Math.abs(x-M.x);if(dx>rad||s[i]<=0)continue;const reach=Math.sqrt(rad*rad-dx*dx);
-        if(Math.abs(c.y(x)-M.y)<reach+s[i]){if(Math.random()<.12)puff(x,c.y(x)-s[i],1,M.vx,M.vy);sub(s,i)}}}
-      for(let q=slabs.length-1;q>=0;q--){const b=slabs[q];if(Math.hypot(b.lastX-M.x,b.lastY-M.y)<rad){puff(b.lastX,b.lastY,8,M.vx,M.vy);slabs.splice(q,1)}}
+      const amt=M.down?99:1.2+sp*.45;
+      for(let i=0;i<ground.length;i++){const x=i*COL,dx=Math.abs(x-M.x);if(dx>rad)continue;const reach=Math.sqrt(rad*rad-dx*dx),top=H-GBASE-ground[i];
+        if(M.y+reach>top&&ground[i]>.2){if(ground[i]>3&&Math.random()<.1)puff(x,top,1,M.vx,M.vy);ground[i]=Math.max(0,ground[i]-amt)}}
+      for(const c of cards){const s=c.sn;for(let i=0;i<s.length;i++){const x=c.l+i*CS,dx=Math.abs(x-M.x);if(dx>rad||s[i]<.2)continue;const reach=Math.sqrt(rad*rad-dx*dx);
+        if(Math.abs(c.top-M.y)<reach+s[i]){if(Math.random()<.12)puff(x,c.top-s[i],1,M.vx,M.vy);s[i]=Math.max(0,s[i]-amt)}}}
     }
-    updateSlabs(k);updateChunks(k);
     const snowFill="#ffffff",edge=dark?null:"#9fb9d6",fl=dark?"#ffffff":"#9fb9d6";
-    tree(W-95,H+3,ts);
-    cx.fillStyle=snowFill;
-    for(const c of tr)capLayer(c,edge);
-    for(const b of slabs){const c=surfOf(b);if(c&&c.tree)drawSlab(b,c,edge)}
-    layer(ground.length,i=>i*COL,i=>ground[i],()=>H,edge,4);
+    tree(W-95,H-GBASE+6,H<520?.6:.9);
+    cx.fillStyle=snowFill;cx.beginPath();cx.moveTo(0,H);for(let i=0;i<ground.length;i++)cx.lineTo(i*COL,H-GBASE-ground[i]);cx.lineTo(W+COL,H);cx.closePath();cx.fill();
+    if(edge){cx.strokeStyle=edge;cx.lineWidth=1;cx.beginPath();for(let i=0;i<ground.length;i++){const y=H-GBASE-ground[i]-.5;i?cx.lineTo(i*COL,y):cx.moveTo(0,y)}cx.stroke()}
     cx.save();cx.beginPath();cx.rect(mainR.left,mainR.top,mainR.width,mainR.height);cx.clip();cx.fillStyle=snowFill;
-    for(const c of cards)capLayer(c,edge);
-    for(const b of slabs){const c=surfOf(b);if(c&&!c.tree)drawSlab(b,c,edge)}
+    for(const c of cards){cx.beginPath();cx.moveTo(c.l+8,c.top+2);for(let i=0;i<c.sn.length;i++){const x=c.l+i*CS,tp=Math.min(1,Math.min(x-c.l,c.r-x)/16);cx.lineTo(x,c.top-c.sn[i]*Math.max(0,tp)+1)}cx.lineTo(c.r-8,c.top+2);cx.closePath();cx.fill();if(edge){cx.strokeStyle=edge;cx.stroke()}}
     cx.restore();
     cx.fillStyle=fl;for(const f of flakes){cx.globalAlpha=.55+f.r*.15;cx.beginPath();cx.arc(f.x,f.y,f.r,0,6.283);cx.fill()}
-    cx.globalAlpha=1;cx.fillStyle=snowFill;
-    for(const p of chunks){const bl=(x,y,r)=>{cx.moveTo(x+r,y);cx.arc(x,y,r,0,6.283)};cx.beginPath();bl(p.x,p.y,p.r);bl(p.x-p.r*.6,p.y+p.r*.25,p.r*.62);bl(p.x+p.r*.55,p.y-p.r*.2,p.r*.55);cx.fill();if(edge){cx.strokeStyle=edge;cx.lineWidth=1;cx.stroke()}}
     cx.fillStyle=snowFill;for(let i=puffs.length-1;i>=0;i--){const q=puffs[i];q.x+=q.vx*k;q.y+=q.vy*k;q.vy+=.12*k;q.a-=.025*k;if(q.a<=0){puffs.splice(i,1);continue}cx.globalAlpha=q.a;cx.beginPath();cx.arc(q.x,q.y,q.r,0,6.283);cx.fill()}
     cx.globalAlpha=1;
   }
@@ -654,25 +565,19 @@ const FX=(()=>{
   function glitch(on){if(on===glOn)return;glOn=on;clearTimeout(glT);R.classList.remove("glx");if(!on)return;
     const go=()=>{glT=setTimeout(()=>{R.classList.add("glx");glT=setTimeout(()=>{R.classList.remove("glx");go()},120+Math.random()*160)},2200+Math.random()*4800)};go()}
 
-  /* Settings > Appearance > Christmas snow: max pile height (px) and fall speed (%). Boxes hold 24% of the floor height, the tree 80% of that. */
-  function cfg(){const st=S.settings||{};gmax=Math.max(4,Math.min(100,+st.snow_height||34));cmax=Math.max(2.5,gmax*.24);tmax=cmax*.8;spd=Math.max(.1,Math.min(3,(+st.snow_speed||100)/100))}
-
   /* called when the theme, the animation switch or the page changes */
-  function sync(){cfg();
-    const th=R.dataset.theme||"",page=typeof S==="object"?S.page:"",animOn=(S.settings&&S.settings.animations)!==false&&!document.hidden&&document.hasFocus()&&innerWidth>0&&innerHeight>0,
+  function sync(){
+    const th=R.dataset.theme||"",page=typeof S==="object"?S.page:"",animOn=(S.settings&&S.settings.animations)!==false&&!document.hidden&&document.hasFocus(),
       f=/^christmas/.test(th)?"christmas":/^halloween/.test(th)?"halloween":null,want=animOn&&f&&(page==="home"||page==="lib"||page==="servers")?f:null;
     dark=/dark$/.test(th)||!/light$/.test(th);
-    if(f!==fam){fam=f;flakes=[];puffs=[];motes=[];ground=new Float32Array(0);cardSnow=new Map();slabs=[];chunks=[];treeS=[];webT0=performance.now()}
+    if(f!==fam){fam=f;flakes=[];puffs=[];motes=[];ground=new Float32Array(0);cardSnow=new WeakMap();webT0=performance.now()}
     mode=want;R.dataset.fx=want?"on":"off";glitch(animOn&&th==="glitch");
     if(!mode){stop();return}
     cv.style.display="block";resize();if(!raf){last=performance.now();raf=requestAnimationFrame(loop)}}
-  return{sync,cfg}
+  return{sync}
 })();
-(function(){const R=document.documentElement;let was=null;
-  const upd=()=>{const p=document.hidden||!document.hasFocus()||innerWidth<=0||innerHeight<=0;if(p===was)return;was=p;
-    window.__orbPaused=p;if(p)R.setAttribute("data-paused","");else R.removeAttribute("data-paused");try{if(S&&S.settings)applyLook();else FX.sync()}catch(e){}};
-  ["blur","focus","pageshow","resize"].forEach(e=>addEventListener(e,upd));document.addEventListener("visibilitychange",upd);
-  setInterval(upd,400);upd()})();
+(function(){const R=document.documentElement,upd=()=>{const p=document.hidden||!document.hasFocus();if(p)R.setAttribute("data-paused","");else R.removeAttribute("data-paused");try{FX.sync()}catch(e){}};
+  ["blur","focus","pageshow"].forEach(e=>addEventListener(e,upd));document.addEventListener("visibilitychange",upd);(document.hidden||!document.hasFocus())&&R.setAttribute("data-paused","")})();
 
 const S={tasks:[],tpOpen:false,pj:null,upd:{},run:{},itab:"content",fpath:"",page:"home",inst:null,instances:[],settings:{},detail:null,bt:null,filters:{},vers:{},shut:{},ls:"",cq:"",ct:"all",groups:[],lib:{sort:"name",group:"custom",loader:[],mc:[],shut:{}},
   br:{type:"mod",source:"modrinth",q:"",sort:"relevance",view:20,page:1,cats:[],loader:"",mc:"",hide:false,hits:[],total:0,loading:false,err:""}};
@@ -802,37 +707,14 @@ const itile=(i,cls="")=>tile(i.name,iconUrl(i),cls);
 /* ---------- running games ---------- */
 function pillUpdate(){const p=$("#pill");if(!p)return;const r=Object.entries(S.run).filter(([,s])=>["installing","running"].includes(s.status));
   p.innerHTML=r.length?`<i style="background:var(--green)"></i>${r.some(([,s])=>s.status==="running")?"Playing":"Preparing"} ${esc(r[0][1].name||"")}${r.length>1?` +${r.length-1}`:""}`:`<i></i>No instances running`}
-const ACTIVE=["installing","running"];
-const runsOf=id=>Object.entries(S.run).filter(([k,r])=>r.iid===id&&k!==id&&ACTIVE.includes(r.status));   /* extra runs of one instance, each under another account */
-function playBtn(id,solo){const r=S.run[id]||{};
-  let h;
-  if(r.status==="installing")h=`<button class="btn brand" disabled><span class="spin"></span>${Math.round((r.progress||0)*100)}%</button>`;
-  else if(r.status==="running")h=`<button class="btn out stop" data-stop="${esc(id)}" ${r.account?`title="Playing as ${esc(r.account)}"`:""}>${ic("stop","sm")}Stop</button>`;
-  else h=`<button class="btn brand" data-play="${esc(id)}">${ic("play","sm")}Play</button>`;
-  if(solo)return h;
-  /* the instance is already running: it can be launched again under another account, beside the first run */
-  const live=ACTIVE.includes(r.status)||runsOf(id).length>0;
-  if(r.status==="running"||(live&&r.status!=="installing"))h+=`<button class="btn" data-more="${esc(id)}" title="Launch this instance again with a different account" aria-label="Launch with another account">${ic("plus","sm")}Another account</button>`;
-  for(const [k,x] of runsOf(id))h+=x.status==="installing"?`<button class="btn" disabled><span class="spin"></span>${esc(x.account||"")} ${Math.round((x.progress||0)*100)}%</button>`
-    :`<button class="btn out stop" data-stopx="${esc(k)}" data-iid="${esc(id)}" title="Stop the run as ${esc(x.account||"")}">${ic("stop","sm")}Stop &middot; ${esc(x.account||"")}</button>`;
-  return h}
-function otherAccounts(id){
-  const used=new Set(Object.values(S.run).filter(r=>r.iid===id&&ACTIVE.includes(r.status)).map(r=>r.acct));
-  const out=[];
-  for(const a of S.settings.ms_accounts||[])if(!used.has("ms:"+a.id))out.push({label:a.name+" (Microsoft)",opts:{account_id:a.id}});
-  const seen=new Set();
-  for(const n of S.settings.accounts||[]){if(seen.has(n)||used.has("off:"+n))continue;seen.add(n);out.push({label:n+" (Offline)",opts:{account_name:n}})}
-  return out}
-function moreMenu(btn,id){
-  const items=otherAccounts(id).map(a=>[esc(a.label),"play",0,()=>play(id,{...a.opts,extra:true})]);
-  items.push(["Add account...","plus",0,async()=>{if(!await askName(true))return;const n=(S.settings.accounts||[]).slice(-1)[0];if(n)play(id,{account_name:n,extra:true})}]);
-  popMenu(btn,items)}
+function playBtn(id){const r=S.run[id]||{};
+  if(r.status==="installing")return`<button class="btn brand" disabled><span class="spin"></span>${Math.round((r.progress||0)*100)}%</button>`;
+  if(r.status==="running")return`<button class="btn out stop" data-stop="${esc(id)}">${ic("stop","sm")}Stop</button>`;
+  return`<button class="btn brand" data-play="${esc(id)}">${ic("play","sm")}Play</button>`}
 function bindPlay(root){
-  root.querySelectorAll("[data-pw]").forEach(w=>{const solo=!!(w.dataset.world||w.dataset.server);w.innerHTML=playBtn(w.dataset.pw,solo);
-    const p=w.querySelector("[data-play]"),s=w.querySelector("[data-stop]"),m=w.querySelector("[data-more]");
-    if(p)p.onclick=e=>{e.stopPropagation();play(p.dataset.play,w.dataset.world?{world:w.dataset.world}:w.dataset.server?{server:w.dataset.server}:{})};if(s)s.onclick=e=>{e.stopPropagation();stopGame(s.dataset.stop)};
-    if(m)m.onclick=e=>{e.stopPropagation();moreMenu(m,m.dataset.more)};
-    w.querySelectorAll("[data-stopx]").forEach(x=>x.onclick=e=>{e.stopPropagation();stopGame(x.dataset.iid,x.dataset.stopx)})});
+  root.querySelectorAll("[data-pw]").forEach(w=>{w.innerHTML=playBtn(w.dataset.pw);
+    const p=w.querySelector("[data-play]"),s=w.querySelector("[data-stop]");
+    if(p)p.onclick=e=>{e.stopPropagation();play(p.dataset.play,w.dataset.world?{world:w.dataset.world}:w.dataset.server?{server:w.dataset.server}:{})};if(s)s.onclick=e=>{e.stopPropagation();stopGame(s.dataset.stop)}});
 }
 function askName(add){return new Promise(res=>{
   openOver(`<div class="modal-bg"><div class="modal"><h2>${add?"Add an account":"Choose a player name"}</h2><div class="note" style="margin:0 0 12px">Orbit starts the game as an offline player. That works for singleplayer and for servers in offline mode. 3 to 16 letters, numbers or underscores.</div>
@@ -841,20 +723,18 @@ function askName(add){return new Promise(res=>{
   const ok=async()=>{try{S.settings=await api("/settings","POST",add?{add_account:$("#un").value}:{username:$("#un").value});if(!$("#un").value.trim())throw new Error("Enter a name first.");closeOver();res(true)}catch(e){toast(e.message,5000)}};
   $("#uo").onclick=ok;$("#un").onkeydown=e=>{if(e.key==="Enter")ok()}})}
 async function play(id,opts={}){
-  if(!opts.extra&&!S.settings.username&&!S.settings.ms_active&&!await askName())return;
-  try{const r=await api(`/instances/${id}/play`,"POST",opts);S.run[r.run||id]=r;updateRunUI();pollRun()}catch(e){toast(e.message,9000)}
+  if(!S.settings.username&&!S.settings.ms_active&&!await askName())return;
+  try{S.run[id]=await api(`/instances/${id}/play`,"POST",opts);updateRunUI();pollRun()}catch(e){toast(e.message,9000)}
 }
-async function stopGame(id,run){try{await api(`/instances/${id}/stop`,"POST",run?{run}:{})}catch(e){toast(e.message)}pollRun()}
+async function stopGame(id){try{await api(`/instances/${id}/stop`,"POST",{})}catch(e){toast(e.message)}pollRun()}
 function updateRunUI(){pillUpdate();document.querySelectorAll("[data-pw]").forEach(w=>bindPlay(w.parentElement))}
 let pollT=null;
 function pollRun(){
   if(pollT)return;
   const tick=async()=>{try{
     const r=(await api("/launch-status")).running;let finished=false;
-    for(const id of Object.keys(S.run)){if(!r[id]&&ACTIVE.includes(S.run[id].status)){
-      const x=S.run[id],extra=x.iid&&x.iid!==id;
-      const s=await api(`/instances/${extra?x.iid:id}/status${extra?"?run="+encodeURIComponent(id):""}`);S.run[id]=s;finished=true;if(s.status==="error")toast(s.error,14000);
-      if(extra)delete S.run[id]}}
+    for(const id of Object.keys(S.run)){if(!r[id]&&["installing","running"].includes(S.run[id].status)){
+      const s=await api(`/instances/${id}/status`);S.run[id]=s;finished=true;if(s.status==="error")toast(s.error,14000)}}
     for(const id in r)S.run[id]=r[id];
     updateRunUI();
     if(S.page==="inst"&&S.itab==="logs"&&S.inst&&r[S.inst])loadLog();
@@ -1056,7 +936,7 @@ async function askClose(){
   if(S.quitting||$("#co"))return;
   let r={instances:[],servers:[]};try{r=await api("/app/running")}catch(e){}
   if((!r.instances.length&&!r.servers.length)||S.settings.close_warning===false)return quitApp();
-  const nm=id=>{const[b,n]=id.split("@"),i=S.instances.find(x=>x.id===b),a=(S.run[id]||{}).account;return(i?i.name:b)+(n&&a?` (${a})`:"")},li=(i,t,n)=>`<li style="display:flex;gap:8px;align-items:center;color:var(--head)">${ic(i,"sm")}<span class="ell">${esc(n)}</span><span class="meta">${t}</span></li>`;
+  const nm=id=>{const i=S.instances.find(x=>x.id===id);return i?i.name:id},li=(i,t,n)=>`<li style="display:flex;gap:8px;align-items:center;color:var(--head)">${ic(i,"sm")}<span class="ell">${esc(n)}</span><span class="meta">${t}</span></li>`;
   let left=Math.max(0,Math.min(120,+S.settings.close_timer||0));
   openOver(`<div class="modal-bg"><div class="modal" role="alertdialog" aria-label="Close Orbit"><h2>Close Orbit?</h2>
    <div class="d" style="margin:0 0 12px">Closing Orbit will shut down all running Minecraft instances and servers.${r.servers.length?" Players on a server get an in-game warning first, and the server is stopped cleanly.":""}</div>
@@ -1323,7 +1203,7 @@ function instSettings(d,sec="general"){
     closeOver();S.instances=(await api("/instances")).instances;nav();render()}catch(e){toast(e.message,6000)}};
 }
 function instInstall(p,d){
-  const busy=(S.run[d.id]||{}).status;const locked=ACTIVE.includes(busy)||runsOf(d.id).length>0;
+  const busy=(S.run[d.id]||{}).status;const locked=["installing","running"].includes(busy);
   p.innerHTML=`<h3>Installation</h3><div class="d">Switch the platform or versions of this instance without recreating it.</div>
   <div class="ibox"><div><span>Platform</span><b>${esc(LOADERS[d.loader]||d.loader)}</b></div><div><span>Game version</span><b>${esc(d.mc)}</b></div>${d.loader!=="vanilla"?`<div><span>${esc(LOADERS[d.loader]||d.loader)} version</span><b>${esc(d.loader_version||"Latest stable")}</b></div>`:""}</div>
   <div id="ied2"><button class="btn warn" id="ie" ${locked?"disabled":""}>${ic("brush","sm")}Edit</button><div class="note" style="margin-top:8px">${locked?"Close the game before changing its installation.":"We don't recommend editing your installation settings after installing content. If you want to edit them, be cautious as it may cause issues."}</div></div>
@@ -1516,7 +1396,7 @@ function exportDone(r,auto){
 function importMenu(){
   const L=[["tlauncher","box","TLauncher","Versions and modpacks from your TLauncher folder."],["modrinth","compass","Modrinth App","Every profile, with its groups, icon and memory settings."],["curseforge","cubes","CurseForge","Instances from the CurseForge app, with their memory and Java settings."]];
   cshell("Import instance",`<div class="cq">Where are you importing from?</div>${L.map(([k,i,t,d])=>`<button class="opt" data-l="${k}"><span class="oi">${ic(i)}</span><span><b>${t}</b><span class="m">${d}</span></span></button>`).join("")}
-   <div class="note">Mods, resource packs and shaders are checked against Modrinth. The ones found there are linked, so they get their icons and can be updated. Folders are set in Settings &gt; Storage.</div>`,{back:createModal});
+   <div class="note">Mods, resource packs and shaders are checked against Modrinth. The ones found there are linked, so they get their icons and can be updated. Folders are set in Settings &gt; Import folders.</div>`,{back:createModal});
   ov().querySelectorAll("[data-l]").forEach(b=>b.onclick=()=>importStep(b.dataset.l));
 }
 S.rndIcon=false;
@@ -1527,7 +1407,7 @@ async function importStep(L){
   const NAMES={tlauncher:"TLauncher",modrinth:"Modrinth App",curseforge:"CurseForge"};
   cshell("Import from "+NAMES[L],SPIN,{back:importMenu,w:640});
   let r;try{r=await api("/import/scan?launcher="+L)}catch(e){
-    $(".cbody").innerHTML=`<div class="empty" style="padding:30px">${esc(e.message)}</div><div class="gap" style="justify-content:flex-end"><button class="btn" id="ics">${ic("set","sm")}Open settings</button></div>`;$("#ics").onclick=()=>settingsModal("storage");return}
+    $(".cbody").innerHTML=`<div class="empty" style="padding:30px">${esc(e.message)}</div><div class="gap" style="justify-content:flex-end"><button class="btn" id="ics">${ic("set","sm")}Open settings</button></div>`;$("#ics").onclick=()=>settingsModal("import");return}
   const vs=r.versions;vs.forEach(v=>{v.pick=(v.sources||[])[0]?v.sources[0].path:""});const can=v=>!v.imported&&!v.unsupported;
   const opts=v=>`<option value="">Don't copy any files</option>`+v.sources.map(s=>`<option value="${esc(s.path)}" ${s.path===v.pick?"selected":""}>${esc(s.label)}: ${esc(srcText(s))}</option>`).join("")+`<option value="__browse">Choose another folder...</option>`;
   const draw=()=>{$(".cbody").innerHTML=vs.length?`<div class="note" style="margin:0 0 12px">Found in <span style="user-select:all">${esc(r.folder)}</span>. Each one becomes a Orbit instance with the same Minecraft version, loader and settings.</div>
@@ -1539,7 +1419,7 @@ async function importStep(L){
    ${rndIconOpt()}
    <div class="note">Settings, options.txt, servers and config files come along too. Nothing is changed in ${NAMES[L]}.</div>
    <div class="gap" style="justify-content:flex-end;margin-top:16px"><button class="btn" id="ic2">Cancel</button><button class="btn brand" id="ii" ${vs.some(can)?"":"disabled"}>Import</button></div>`
-   :`<div class="empty" style="padding:30px">Nothing to import was found in<br><span class="meta" style="user-select:all">${esc(r.folder)}</span><br><br>Check the folder in Settings &gt; Storage.</div><div class="gap" style="justify-content:flex-end"><button class="btn" id="ic2">Close</button></div>`;
+   :`<div class="empty" style="padding:30px">Nothing to import was found in<br><span class="meta" style="user-select:all">${esc(r.folder)}</span><br><br>Check the folder in Settings &gt; Import folders.</div><div class="gap" style="justify-content:flex-end"><button class="btn" id="ic2">Close</button></div>`;
   $("#ic2").onclick=closeOver;
   document.querySelectorAll("[data-s]").forEach(sel=>sel.onchange=async()=>{const v=vs[sel.dataset.s];
     if(sel.value!=="__browse"){v.pick=sel.value;return}
@@ -2093,17 +1973,17 @@ function drawFilters(){
 
 /* ---------- settings (modal, like the Modrinth app) ---------- */
 function settingsModal(sec="appearance"){
-  const nav=[["DISPLAY",[["appearance","Appearance","brush"]]],["INSTANCES",[["storage","Storage","folder"],["launch","Launch","play"],["playtime","Playtime","clock"]]],["INTEGRATIONS",[["accounts","Microsoft account","key"],["curseforge","CurseForge key","key"]]],["ABOUT",[["about","About Orbit","info"]]]];
+  const nav=[["DISPLAY",[["appearance","Appearance","brush"]]],["INSTANCES",[["storage","Storage","folder"],["launch","Launch","play"]]],["INTEGRATIONS",[["accounts","Microsoft account","key"],["curseforge","CurseForge key","key"],["tlauncher","TLauncher","box"],["import","Import folders","folder"]]],["ABOUT",[["about","About Orbit","info"]]]];
   openOver(`<div class="modal-bg"><div class="smodal" role="dialog" aria-label="Settings"><div class="shead"><h2>Settings</h2><button class="xb" id="sx" aria-label="Close">${ic("x")}</button></div>
   <div class="sbody"><div class="snav">${nav.map(([h,items])=>`<h4>${h}</h4>`+items.map(([k,t,i])=>`<button data-sec="${k}" class="${k===sec?"on":""}">${ic(i,"sm")}${t}</button>`).join("")).join("")}</div><div class="spane" id="sp"></div></div></div></div>`);
   $("#sx").onclick=closeOver;
   ov().querySelectorAll("[data-sec]").forEach(b=>b.onclick=()=>settingsModal(b.dataset.sec));
-  api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,playtime:pPlaytime,accounts:pAccounts,curseforge:pCF,about:pAbout})[sec]($("#sp"))});
+  api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,accounts:pAccounts,curseforge:pCF,tlauncher:pTL,import:pImport,about:pAbout})[sec]($("#sp"))});
 }
 const AC=[["Theme default",""],["Orbit green","#1bd96a"],["Blue","#4c8dff"],["Purple","#a56bff"],["Pink","#ff5fa2"],["Orange","#ff9a3c"],["Red","#ff496e"],["Teal","#2ad4c9"]];
 const THEME_ACC={"christmas-light":"#c8222d","christmas-dark":"#d6313d","halloween-light":"#e8650a","halloween-dark":"#ff7a18",glitch:"#00e5ff",synthwave:"#ff2fb8",aurora:"#2fe0a8"};
 function pAppearance(p){
-  const cur=S.settings.theme||"oled",animOn=S.settings.animations!==false,snH=Math.max(4,Math.min(100,+S.settings.snow_height||34)),snS=Math.max(10,Math.min(300,+S.settings.snow_speed||100));
+  const cur=S.settings.theme||"oled",animOn=S.settings.animations!==false;
   /* single themes: [key,label,bg,card,line]; dual themes: one slot, left half = Light, right half = Dark */
   const th=[[ "dark","Dark","#16181c","#26292f","#4a4f58"],["light","Light ☀","#f5f5f5","#ffffff","#2c2e31"],["oled","OLED ☾","#000","#16181c","#3a3f47"],["system","Sync with system","#000","#16181c","#3a3f47"],
     {n:"Christmas 🎄",l:["christmas-light","#f7f2e9","#ffffff","#c8222d"],d:["christmas-dark","#0d1a14","#15291f","#d6313d"]},
@@ -2117,10 +1997,6 @@ function pAppearance(p){
   p.innerHTML=`<h3>Color theme</h3><div class="d">Select your preferred color theme across Orbit. Christmas and Halloween have a Light and a Dark side: click the half you want.</div><div class="themes">${th.map(t=>Array.isArray(t)?one(t):two(t)).join("")}</div>
   <h3>Theme animations</h3><div class="d">Animated backgrounds and effects for the Christmas, Halloween, Glitch, Synthwave and Aurora themes. The interactive snow, webs and dust only appear on Home and Servers.</div>
   <div class="tgl" id="an" role="switch" tabindex="0" aria-checked="${animOn}">Theme animations: ${animOn?"On":"Off"}<span class="sw ${animOn?"on":""}"></span></div>
-  <h3 style="margin-top:22px">Christmas snow</h3><div class="d">How deep the snow can pile up and how fast it falls (Christmas themes). Cards and the tree hold less than the floor, and snow that gets too deep slides off by itself.</div>
-  <div class="field" style="margin-top:0"><label class="l" for="snh">Maximum snow height</label><div class="ramf"><input type="range" id="snh" min="4" max="100" step="1" value="${snH}"><span class="rl" id="snhl">${snH} px</span></div></div>
-  <div class="field"><label class="l" for="sns">Snowfall speed</label><div class="ramf"><input type="range" id="sns" min="10" max="300" step="5" value="${snS}"><span class="rl" id="snsl">${snS}%</span></div></div>
-  <div class="gap"><button class="btn sm" id="snr">Reset snow</button></div>
   <h3 style="margin-top:22px">High contrast</h3><div class="d">Stronger text and borders and a clear focus outline, for easier reading.</div>
   <div class="tgl" id="hc" role="switch" tabindex="0" aria-checked="${!!S.settings.high_contrast}">High contrast mode<span class="sw ${S.settings.high_contrast?"on":""}"></span></div>
   <h3 style="margin-top:22px">Accent color</h3><div class="d">Used for buttons, highlights and links. "Theme default" keeps each theme's own colour. Text colors are adjusted to stay readable.</div>
@@ -2129,10 +2005,6 @@ function pAppearance(p){
   p.querySelectorAll("[data-th]").forEach(b=>b.onclick=async()=>{const t=b.dataset.th;S.settings.theme=t;applyTheme(t);FX.sync();S.settings=await api("/settings","POST",{theme:t});pAppearance(p)});
   const anT=async()=>{const v=S.settings.animations===false;S.settings.animations=v;applyLook();try{S.settings=await api("/settings","POST",{animations:v})}catch(e){toast(e.message,4000)}pAppearance(p)};
   $("#an").onclick=anT;$("#an").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();anT()}};
-  const snowSl=(id,lab,key,unit)=>{const r=$("#"+id);r.oninput=()=>{$("#"+lab).textContent=r.value+unit;S.settings[key]=+r.value;FX.cfg()};
-    r.onchange=async()=>{try{S.settings=await api("/settings","POST",{[key]:+r.value})}catch(e){toast(e.message,4000)}FX.cfg()}};
-  snowSl("snh","snhl","snow_height"," px");snowSl("sns","snsl","snow_speed","%");
-  $("#snr").onclick=async()=>{try{S.settings=await api("/settings","POST",{snow_height:34,snow_speed:100})}catch(e){toast(e.message,4000)}FX.cfg();pAppearance(p)};
   const hcT=async()=>{const v=!S.settings.high_contrast;S.settings.high_contrast=v;applyLook();try{S.settings=await api("/settings","POST",{high_contrast:v})}catch(e){toast(e.message,4000)}pAppearance(p)};
   $("#hc").onclick=hcT;$("#hc").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();hcT()}};
   const setAcc=async hex=>{S.settings.accent=hex;applyAccent(hex);try{S.settings=await api("/settings","POST",{accent:hex})}catch(e){toast(e.message,4000)}pAppearance(p)};
@@ -2153,7 +2025,7 @@ function pAccounts(p){
   if($("#msoff"))$("#msoff").onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_active:""});pAccounts(p)}catch(e){toast(e.message,5000)}};
   $("#mcs").onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_client_id:$("#mcid2").value});toast("Saved",2000)}catch(e){toast(e.message,6000)}};
 }
-function pStorageMain(p){
+function pStorage(p){
   const s=S.settings;let val=s.folder;
   p.innerHTML=`<h3>Instances location</h3><div class="d">Where Orbit keeps your instances (each one is a folder holding its mods, resource packs, data packs and shaders). Point this at another drive if your main one is short on space.</div>
   <div class="path"><input type="text" id="pd" value="${esc(s.folder)}" spellcheck="false" aria-label="Instances folder"><button class="btn" id="br">${ic("folder","sm")}Browse</button></div>
@@ -2166,33 +2038,10 @@ function pStorageMain(p){
   const save=async(dir)=>{const b=$("#sv");b.disabled=true;
     try{const r=await api("/settings","POST",{instances_dir:dir,move:$("#mv")?$("#mv").checked:false});S.settings=r;
       toast(r.moved?`Moved ${r.moved} instance${r.moved===1?"":"s"} to ${r.folder}`:`Instances folder is now ${r.folder}`,5000);
-      S.instances=(await api("/instances")).instances;nav();topbar();if(S.page==="inst"&&!S.instances.find(i=>i.id===S.inst))go("lib");else if(S.page!=="inst")render();pStorageMain(p)}
+      S.instances=(await api("/instances")).instances;nav();topbar();if(S.page==="inst"&&!S.instances.find(i=>i.id===S.inst))go("lib");else if(S.page!=="inst")render();pStorage(p)}
     catch(e){toast(e.message,7000);b.disabled=false}};
   $("#sv").onclick=()=>save($("#pd").value.trim());
   if($("#rs"))$("#rs").onclick=()=>save("");
-}
-function pStorage(p){
-  p.innerHTML='<div id="st-main"></div><div id="st-tl" style="margin-top:28px;padding-top:6px;border-top:1px solid var(--line,rgba(128,128,128,.25))"></div><div id="st-imp" style="margin-top:28px;padding-top:6px;border-top:1px solid var(--line,rgba(128,128,128,.25))"></div>';
-  pStorageMain($("#st-main"));pTL($("#st-tl"));pImport($("#st-imp"));
-}
-const pdur=s=>{s=Math.max(0,Math.round(s||0));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?`${h}h ${m}m`:m?`${m}m`:`${s}s`};
-async function pPlaytime(p){
-  p.innerHTML=`<h3>Playtime</h3><div class="d">How long Minecraft has run through Orbit. This history is kept on its own, so deleting an instance doesn't erase its time.</div><div class="note">Loading...</div>`;
-  let d;try{d=await api("/playtime")}catch(e){p.innerHTML+=`<div class="note">${esc(e.message)}</div>`;return}
-  if(!p.isConnected)return;
-  const live=new Set(Object.values(S.run).filter(r=>ACTIVE.includes(r.status)).map(r=>r.iid)),list=d.instances||[],max=Math.max(1,...list.map(i=>i.total));
-  const row=i=>{const ss=[...(i.sessions||[])].reverse(),last=ss[0];
-    return`<div class="ptrow ${i.deleted?"gone":""}" data-pt="${esc(i.id)}"><div class="pthead"><div class="grow" style="min-width:0"><div class="nm ell">${esc(i.name||i.id)}${i.deleted?'<span class="badge">Deleted</span>':""}${!i.deleted&&live.has(i.id)?'<span class="badge">Playing now</span>':""}</div>
-      <div class="meta">${esc(LOADERS[i.loader]||i.loader||"")} ${esc(i.mc||"")}${i.deleted&&i.deleted_at?` &middot; deleted ${esc(playedAgo(i.deleted_at).toLowerCase())}`:i.last?` &middot; last played ${esc(playedAgo(i.last).toLowerCase())}`:""}${ss.length?` &middot; ${ss.length} session${ss.length>1?"s":""}`:""}${last?` &middot; last session ${pdur(last.secs)}`:""}</div></div><b class="ptt">${pdur(i.total)}</b></div>
-      <div class="ptbar"><i style="width:${Math.max(2,Math.round(i.total/max*100))}%"></i></div>
-      <div class="ptsess" hidden>${ss.length?ss.slice(0,15).map(x=>`<div><span>${esc(new Date(x.start*1000).toLocaleString())}</span><span class="meta">${esc(x.account||"")}</span><b>${pdur(x.secs)}</b></div>`).join("")+(ss.length>15?`<div class="meta">${ss.length-15} older sessions not shown</div>`:""):'<div class="meta">No individual sessions recorded (played before session tracking).</div>'}</div></div>`};
-  const a=list.filter(i=>!i.deleted),g=list.filter(i=>i.deleted);
-  p.innerHTML=`<h3>Playtime</h3><div class="d">How long Minecraft has run through Orbit. This history is kept on its own, so deleting an instance doesn't erase its time. Click an instance to see its recent sessions.</div>
-  <div class="pttotal"><span class="meta">Total playtime</span><b>${pdur(d.total)}</b><span class="meta">${list.length} instance${list.length===1?"":"s"}${g.length?`, ${g.length} deleted`:""}. Two runs at once each count their own time.</span></div>
-  ${list.length?"":'<div class="note">Nothing recorded yet. Play an instance and its time shows up here.</div>'}
-  ${a.length?`<h3 style="margin-top:20px">Instances</h3>${a.map(row).join("")}`:""}
-  ${g.length?`<h3 style="margin-top:20px">Deleted instances</h3>${g.map(row).join("")}`:""}`;
-  p.querySelectorAll("[data-pt]").forEach(r=>r.onclick=()=>{const x=r.querySelector(".ptsess");x.hidden=!x.hidden});
 }
 function pLaunch(p){
   const s=S.settings;
