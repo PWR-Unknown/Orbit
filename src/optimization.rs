@@ -15,7 +15,7 @@
 //! Applying is best effort: the instance always exists afterwards, and problems come back as data
 //! (`error`, `skipped`, `warnings`) for the UI instead of failing the whole creation.
 use crate::deps;
-use crate::modrinth::api_get;
+use crate::mods::api_get;
 use crate::mods::{self, Log};
 use crate::store::Instance;
 use crate::util::{track_expected, Res};

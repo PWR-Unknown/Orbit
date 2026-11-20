@@ -2,7 +2,7 @@
 //! ui/index.html works as it is. Errors are plain strings -> HTTP 400 (NOT_PORTED: prefix -> 501).
 use crate::mods::{self, Log};
 use crate::util::{SharedTrack, Track};
-use crate::{auth, dialogs, gamedata, icons, importers, launcher, modrinth, mrpack, optimization, servers, store, tl};
+use crate::{auth, dialogs, gamedata, icons, importers, launcher, optimization, servers, store, tl};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -23,11 +23,6 @@ pub struct Req<'a> {
 pub enum Out {
     Json(Value),
     Bytes(Vec<u8>, &'static str),
-}
-
-#[allow(dead_code)]
-pub fn not_ported(what: &str) -> Res {
-    Err(format!("NOT_PORTED: {what} hasn't been ported to the Rust version yet."))
 }
 
 const THEMES: [&str; 11] = ["dark", "light", "oled", "system", "christmas-light", "christmas-dark", "halloween-light", "halloween-dark", "glitch", "synthwave", "aurora"];
@@ -68,8 +63,8 @@ fn dir_setting(st: &mut Map<String, Value>, b: &Value, key: &str, label: &str) -
 }
 
 pub fn use_key() {
-    modrinth::clear_cf_key();
-    if let Some(k) = store::settings().get("cf_key").and_then(|v| v.as_str()) { modrinth::set_cf_key(k); }
+    mods::clear_cf_key();
+    if let Some(k) = store::settings().get("cf_key").and_then(|v| v.as_str()) { mods::set_cf_key(k); }
 }
 
 // ---------- caches ----------
@@ -155,6 +150,8 @@ fn settings(r: &Req) -> Res {
         if let Some(w) = b["close_warning"].as_bool() { st.insert("close_warning".into(), json!(w)); }
         if let Some(n) = b["close_timer"].as_i64() { st.insert("close_timer".into(), json!(n.clamp(0, 120))); }
         if let Some(a) = b["animations"].as_bool() { st.insert("animations".into(), json!(a)); } // theme animations on/off
+        if let Some(n) = b["snow_height"].as_i64() { st.insert("snow_height".into(), json!(n.clamp(4, 100))); } // Christmas: max snow pile height (px)
+        if let Some(n) = b["snow_speed"].as_i64() { st.insert("snow_speed".into(), json!(n.clamp(10, 300))); } // Christmas: snowfall speed (%)
         // minutes east of UTC, reported by the window; the daily server restart uses it to read the local clock
         if let Some(o) = b["tz_offset"].as_i64().filter(|o| (-840..=840).contains(o)) { st.insert("tz_offset".into(), json!(o)); }
         let mut accts = accounts(&st);
@@ -229,6 +226,7 @@ fn settings(r: &Req) -> Res {
         "accent": g("accent"), "high_contrast": st.get("high_contrast").and_then(|v| v.as_bool()).unwrap_or(false),
         "close_warning": store::close_warning(), "close_timer": store::close_timer(),
         "animations": st.get("animations").and_then(|v| v.as_bool()).unwrap_or(true),
+        "snow_height": store::snow_height(), "snow_speed": store::snow_speed(),
         "mr_dir": store::mr_root().to_string_lossy(), "mr_default": store::default_modrinth_dir().to_string_lossy(),
         "mr_is_default": g("modrinth_dir").is_empty(),
         "cfa_dir": store::cfapp_root().to_string_lossy(), "cfa_default": store::default_curseforge_dir().to_string_lossy(),
@@ -409,7 +407,7 @@ fn export_pack(inst: &store::Instance, b: &Value) -> Res {
     let include: Vec<String> = b["include"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
     let _g = JOB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     use_key();
-    mrpack::build(inst, &d, name, version, s(b, "description"), &include)
+    mods::build_mrpack(inst, &d, name, version, s(b, "description"), &include)
 }
 
 fn toggle_content(inst: &mut store::Instance, key: &str) -> Result<(), String> {
@@ -482,7 +480,7 @@ fn set_installation(inst: &mut store::Instance, iid: &str, b: &Value) -> Res {
     if !(mods::is_loader(loader) || loader == "vanilla") || !re(r"^[A-Za-z0-9._\-]{1,32}$").is_match(mc) { return Err("Pick a platform and a game version.".into()); }
     let lv = if loader == "vanilla" { "" } else { s(b, "loader_version").trim() };
     if !lv.is_empty() && !re(r"^[A-Za-z0-9._+\-]{1,64}$").is_match(lv) { return Err("That loader version isn't valid.".into()); }
-    if matches!(launcher::status(iid)["status"].as_str(), Some("installing") | Some("running")) { return Err("Close the game before changing its installation.".into()); }
+    if launcher::instance_busy(iid) { return Err("Close the game before changing its installation.".into()); }
     inst.state["config"]["mc"] = json!(mc);
     inst.state["config"]["loader"] = json!(loader);
     if lv.is_empty() { inst.state["config"].as_object_mut().map(|o| o.remove("loader_version")); } else { inst.state["config"]["loader_version"] = json!(lv); }
@@ -618,15 +616,15 @@ fn create_from_project(task: &Option<String>, source: &str, ident: &str, ptype: 
     if source != "modrinth" { return Err("Only Modrinth projects can start an instance for now.".into()); }
     if ptype == "modpack" { return install_modpack(task, source, ident, ""); }
     use_key();
-    let meta = modrinth::api_get(&format!("/project/{ident}"), &[])?;
+    let meta = mods::api_get(&format!("/project/{ident}"), &[])?;
     if meta.is_null() { return Err("That project wasn't found on Modrinth.".into()); }
     let title = s(&meta, "title").to_string();
     let loaders: Vec<&str> = meta["loaders"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).collect();
     let loader = if ptype == "mod" {
         ["fabric", "neoforge", "forge", "quilt"].into_iter().find(|l| loaders.contains(l)).ok_or_else(|| format!("{title} doesn't support a loader Orbit can run."))?
     } else { "fabric" };
-    let params: Vec<(&str, String)> = if ptype == "mod" { vec![("loaders", modrinth::jl(&[loader]))] } else { vec![] };
-    let vers = modrinth::api_get(&format!("/project/{}/version", s(&meta, "id")), &params)?;
+    let params: Vec<(&str, String)> = if ptype == "mod" { vec![("loaders", mods::jl(&[loader]))] } else { vec![] };
+    let vers = mods::api_get(&format!("/project/{}/version", s(&meta, "id")), &params)?;
     let Some(vs) = vers.as_array().filter(|v| !v.is_empty()) else { return Err(format!("{title} has no versions to start from.")) };
     let v = vs.iter().find(|x| x["version_type"] == "release").unwrap_or(&vs[0]);
     let gv: Vec<&str> = v["game_versions"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).collect();
@@ -648,16 +646,16 @@ fn create_from_project(task: &Option<String>, source: &str, ident: &str, ptype: 
 
 fn game_versions(snapshots: bool) -> Res {
     use_key();
-    let cf_on = !modrinth::cf_key().is_empty();
+    let cf_on = !mods::cf_key().is_empty();
     let ck = (snapshots, cf_on);
     if let Some((_, t, v)) = VCACHE.lock().unwrap().iter().find(|(c, _, _)| *c == ck) { if t.elapsed().as_secs() < 3600 { return Ok(v.clone()); } }
-    let mr = modrinth::api_get("/tag/game_version", &[])?;
+    let mr = mods::api_get("/tag/game_version", &[])?;
     let mut vs: Vec<Value> = mr.as_array().cloned().unwrap_or_default().into_iter().filter(|v| snapshots || v["version_type"] == "release").collect();
     vs.sort_by(|a, b| s(b, "date").cmp(s(a, "date")));
     let mut names: Vec<String> = vs.iter().map(|v| s(v, "version").to_string()).collect();
     let mut both = false;
     if cf_on {
-        if let Ok(cf) = modrinth::cf_get("/minecraft/version", &[]) {
+        if let Ok(cf) = mods::cf_get("/minecraft/version", &[]) {
             let set: std::collections::HashSet<&str> = cf["data"].as_array().into_iter().flatten().filter_map(|v| v["versionString"].as_str()).collect();
             names.retain(|n| set.contains(n.as_str()));
             both = true;
@@ -674,7 +672,7 @@ fn tag_filters(ptype: &str) -> Res {
     let kind = if ptype == "mod" || ptype == "datapack" { "mod" } else { ptype };
     let cached = TCACHE.lock().unwrap().iter().find(|(k, _)| k == kind).map(|(_, v)| v.clone());
     let groups = match cached { Some(g) => g, None => {
-        let tags = modrinth::api_get("/tag/category", &[])?;
+        let tags = mods::api_get("/tag/category", &[])?;
         let mut groups = Map::new();
         for t in tags.as_array().into_iter().flatten() {
             if t["project_type"] == kind {
@@ -848,12 +846,20 @@ fn instance_action(r: &Req, iid: &str, act: &str) -> Result<Out, String> {
             let quick = if !s(b, "world").is_empty() { Some(("singleplayer".to_string(), s(b, "world").to_string())) }
                 else if !s(b, "server").is_empty() { Some(("multiplayer".to_string(), s(b, "server").to_string())) } else { None };
             let name = inst.state["name"].as_str().unwrap_or(iid).to_string();
-            json_out(launcher::start(&inst.root, iid, &name, store::settings(), store::meta_dir(), quick))
+            let account = if !s(b, "account_id").is_empty() { Some(("ms".to_string(), s(b, "account_id").to_string())) }
+                else if !s(b, "account_name").is_empty() { Some(("offline".to_string(), valid_name(s(b, "account_name"))?)) } else { None };
+            json_out(launcher::start(&inst.root, iid, &name, store::settings(), store::meta_dir(), quick, account, b["extra"] == true))
         }
         (_, "worlds") => Ok(Out::Json(json!({"worlds": gamedata::list_worlds(&inst.root)}))),
         (_, "servers") => { let sv = gamedata::list_servers(&inst.root); Ok(Out::Json(json!({"servers": if q.contains_key("ping") && q["ping"] != "0" { gamedata::ping_all(sv) } else { sv }}))) }
-        (_, "stop") => { launcher::stop(iid)?; Ok(Out::Json(launcher::status(iid))) }
-        (_, "status") => Ok(Out::Json(launcher::status(iid))),
+        (_, "stop") => {
+            // "run" names one of this instance's runs ("<iid>@2"); without it the main run stops
+            let key = match s(b, "run") { "" => iid.to_string(), k if k.strip_prefix(&iid[..]).map_or(false, |r| r.starts_with('@')) => k.to_string(), _ => return Err("That run doesn't belong to this instance.".into()) };
+            launcher::stop(&key)?; Ok(Out::Json(launcher::status(&key)))
+        }
+        (_, "status") => Ok(Out::Json(match q.get("run").map(|k| k.as_str()) {
+            Some(k) if k.strip_prefix(&iid[..]).map_or(false, |r| r.starts_with('@')) => launcher::status(k),
+            _ => launcher::status(iid) })),
         (_, "logs") => json_out(read_log(&inst)),
         (_, "files") => json_out(list_files(&inst, q.get("path").map(|s| s.as_str()).unwrap_or(""))),
         (_, "toggle") => { toggle_content(&mut inst, s(b, "key"))?; let mut d = instance_detail(iid)?; d["log"] = json!([]); Ok(Out::Json(d)) }
@@ -1006,6 +1012,7 @@ pub fn route(r: &Req) -> Result<Out, String> {
             }
             return j(Ok(json!({"groups": all_groups()})));
         }
+        "/api/playtime" => return j(Ok(store::playtime_report())),
         "/api/launch-status" => return j(Ok(json!({"running": launcher::running()}))),
         "/api/project" => { use_key(); return j(mods::project_page(qs("id"))); }
         "/api/project/versions" => return j(mods::project_versions(qs("id")).map(|v| json!({"versions": v}))),
@@ -1093,6 +1100,8 @@ pub fn route(r: &Req) -> Result<Out, String> {
         if act.is_empty() && m == "GET" { return j(instance_detail(iid)); }
         if act.is_empty() && m == "DELETE" {
             store::load_inst(iid)?;
+            if launcher::instance_busy(iid) { return Err("Close the game before deleting this instance.".into()); }
+            store::playtime_archive(iid);                                       // keep its playtime in Settings > Playtime
             std::fs::remove_dir_all(inst_path(iid)?).map_err(|e| e.to_string())?;
             return j(Ok(json!({"ok": true})));
         }
