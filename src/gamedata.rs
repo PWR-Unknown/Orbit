@@ -294,7 +294,7 @@ fn jar_title(path: &Path) -> Option<String> {
 /// Register content files that are in the instance folders but not in its state (dropped in by hand), and
 /// forget entries Orbit only knew as 'imported' whose file was deleted by hand. Returns (changed, new keys).
 pub fn sync_untracked(inst: &mut crate::store::Instance) -> (bool, Vec<String>) {
-    use crate::tl;
+    use crate::importers;
     let mut tracked: std::collections::HashSet<String> = std::collections::HashSet::new();
     for m in inst.mods().values() {
         match m["relpath"].as_str().filter(|r| !r.is_empty()) {
@@ -306,7 +306,7 @@ pub fn sync_untracked(inst: &mut crate::store::Instance) -> (bool, Vec<String>) 
         }
     }
     let (mut changed, mut new) = (false, vec![]);
-    for dname in tl::CONTENT_DIRS {
+    for dname in importers::CONTENT_DIRS {
         let d = inst.root.join(dname);
         let Ok(rd) = std::fs::read_dir(&d) else { continue };
         let mut files: Vec<std::path::PathBuf> = rd.flatten().map(|e| e.path()).collect();
@@ -315,7 +315,7 @@ pub fn sync_untracked(inst: &mut crate::store::Instance) -> (bool, Vec<String>) 
             let name = f.file_name().unwrap().to_string_lossy().to_string();
             let low = name.to_lowercase();
             let is_file = std::fs::symlink_metadata(&f).map(|m| m.is_file()).unwrap_or(false);
-            if !is_file || !tl::has_ext(&name) { continue; }
+            if !is_file || !importers::has_ext(&name) { continue; }
             let stem = if low.ends_with(".disabled") { name[..name.len() - 9].to_string() } else { name.clone() };
             if !tracked.insert(format!("{dname}/{stem}").to_lowercase()) { continue; }
             let key = format!("imp:{dname}/{stem}");

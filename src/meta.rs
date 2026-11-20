@@ -1,23 +1,16 @@
-//! Version profiles, loader versions, TLauncher export/import (port of tlauncher.py).
-use crate::mods::is_loader;
-use crate::store::Instance;
+//! Minecraft version profiles, loader versions and loader installers (Mojang piston-meta, Fabric/Quilt meta, Forge/NeoForge).
 use crate::util::{download_file, get_json, get_text, Res};
-use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
-pub const MANIFEST: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 pub const MARKER: &str = "quarry-export.json";
-pub const CONTENT_DIRS: [&str; 4] = ["mods", "resourcepacks", "shaderpacks", "datapacks"];
-pub const CONTENT_EXT: [&str; 3] = [".jar", ".zip", ".disabled"];
-const SKIP_DIRS: [&str; 9] = ["versions", "libraries", "assets", "runtime", "logs", "crash-reports", "saves", "natives", "bin"];
+pub const MANIFEST: &str = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
 pub fn meta_url(loader: &str) -> Option<&'static str> {
     match loader { "fabric" => Some("https://meta.fabricmc.net/v2/versions/loader"), "quilt" => Some("https://meta.quiltmc.org/v3/versions/loader"), _ => None }
 }
 pub fn label(l: &str) -> &str { match l { "fabric" => "Fabric", "quilt" => "Quilt", "forge" => "Forge", "neoforge" => "NeoForge", o => o } }
 
-pub fn has_ext(name: &str) -> bool { let l = name.to_lowercase(); CONTENT_EXT.iter().any(|e| l.ends_with(e)) }
 
 pub fn vanilla_profile(mc: &str) -> Res {
     let m = get_json(MANIFEST)?;
@@ -89,7 +82,7 @@ pub fn meta_profile(loader: &str, mc: &str, version: Option<&str>) -> Res<(Value
 
 // ---------- Forge / NeoForge ----------
 
-fn vkey(s: &str) -> Vec<u64> { s.split(['.', '-']).map(|x| x.parse().unwrap_or(0)).collect() }
+pub fn vkey(s: &str) -> Vec<u64> { s.split(['.', '-']).map(|x| x.parse().unwrap_or(0)).collect() }
 
 fn neo_prefix(mc: &str) -> String {
     let p: Vec<&str> = mc.split('.').collect();
@@ -234,163 +227,6 @@ pub fn installer_profile(loader: &str, mc: &str, root: &Path, version: Option<&s
     res
 }
 
-// ---------- export ----------
-
-fn pick_name(root: &Path, display: &str, iid: &str) -> Res<String> {
-    let base = Regex::new(r"[^A-Za-z0-9._ -]+").unwrap().replace_all(display, "").trim_matches([' ', '.']).to_string();
-    let base = if base.is_empty() { iid.to_string() } else { base };
-    let suffix = &iid[iid.len().saturating_sub(4)..];
-    for cand in [base.clone(), format!("{base}-orbit"), format!("{base}-{suffix}")] {
-        let d = root.join("versions").join(&cand);
-        if !d.exists() { return Ok(cand); }
-        if let Some(i) = std::fs::read_to_string(d.join(MARKER)).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
-            if i["instance"] == iid { return Ok(cand); }
-        }
-    }
-    Err(format!("Can't find a free version name for '{base}' in TLauncher's folder."))
-}
-
-fn sidecar(name: &str, mc: &str, loader: &str, lv: &str) -> Value {
-    let mut vtype = json!({"name": loader});
-    if loader == "forge" { vtype["id"] = json!(1); }
-    let stamp = -((crate::store::now() * 1000.0) as i64);
-    json!({"activateSkinCapeForUserVersion": false, "skipHashsumValidation": false, "additionalFiles": [], "tlauncherVersion": 0,
-        "modpack": {"modpackMemory": false, "memory": 0, "id": stamp, "name": name, "favorite": false,
-            "version": {"mods": [], "resourcePacks": [], "maps": [], "shaderpacks": [], "gameVersionDTO": {"name": mc},
-                "minecraftVersionName": {"name": lv}, "id": stamp - 1, "name": "1.0", "available": false, "remove": false, "minecraftVersionTypes": [vtype]},
-            "userInstall": false, "populateStatus": false, "available": false, "parser": false, "notExists": false, "totalComments": 0},
-        "source": "local_version_repo", "jar": mc, "skinVersion": false})
-}
-
-pub fn export(inst: &Instance, iid: &str, root: &Path) -> Res {
-    let cfg = inst.cfg()?;
-    let (mc, loader) = (cfg["mc"].as_str().unwrap_or("").to_string(), cfg["loader"].as_str().unwrap_or("").to_string());
-    if loader == "vanilla" {
-        return Err("Vanilla instances don't need exporting: pick the release in TLauncher and point its game folder at this instance.".into());
-    }
-    if !root.is_dir() { return Err(format!("{} doesn't exist. Set your TLauncher folder in Settings > TLauncher.", root.display())); }
-    let name = pick_name(root, inst.state["name"].as_str().unwrap_or(iid), iid)?;
-    let vanilla = vanilla_profile(&mc)?;
-    let want = cfg["loader_version"].as_str().filter(|s| !s.is_empty());
-    let (prof, lv) = if meta_url(&loader).is_some() { meta_profile(&loader, &mc, want)? } else { installer_profile(&loader, &mc, root, want)? };
-    let d = root.join("versions").join(&name);
-    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
-    let w = |f: String, v: &Value| std::fs::write(d.join(f), serde_json::to_string_pretty(v).unwrap()).map_err(|e| e.to_string());
-    w(format!("{name}.json"), &merge(&vanilla, &prof, &name)?)?;
-    w("TLauncherAdditional.json".into(), &sidecar(&name, &mc, &loader, &lv))?;
-    std::fs::write(d.join(MARKER), json!({"instance": iid}).to_string()).map_err(|e| e.to_string())?;
-    Ok(json!({"name": name, "folder": d.to_string_lossy(), "loader_version": lv, "gamedir": inst.root.to_string_lossy()}))
-}
-
-// ---------- import: TLauncher -> Orbit ----------
-
-const LOADER_LIBS: [(&str, &str); 4] = [("net.fabricmc:fabric-loader", "fabric"), ("org.quiltmc:quilt-loader", "quilt"),
-    ("net.neoforged:neoforge", "neoforge"), ("net.minecraftforge:forge", "forge")];
-const MC_LIBS: [&str; 2] = ["net.fabricmc:intermediary", "org.quiltmc:hashed"];
-
-fn read_json(p: &Path) -> Option<Value> { serde_json::from_str(std::fs::read_to_string(p).ok()?.trim_start_matches('\u{feff}')).ok() }
-
-/// (name, mc, loader, loader_version) for a TLauncher version, or None.
-pub fn detect(vid: &str, vj: &Value, side: Option<&Value>) -> Option<(String, String, String, String)> {
-    let libs: Vec<&str> = vj["libraries"].as_array().into_iter().flatten().map(|l| l["name"].as_str().unwrap_or("")).collect();
-    let (mut loader, mut lv): (Option<String>, String) = (None, String::new());
-    for (prefix, ld) in LOADER_LIBS {
-        let pre = format!("{prefix}:");
-        if let Some(h) = libs.iter().find(|n| n.starts_with(&pre) && n.matches(':').count() == 2) {
-            loader = Some(ld.to_string()); lv = h.split(':').nth(2).unwrap_or("").to_string(); break;
-        }
-    }
-    let empty = json!({});
-    let mp = side.map(|s| &s["modpack"]).filter(|m| m.is_object()).unwrap_or(&empty);
-    let ver = &mp["version"];
-    if loader.is_none() {
-        let t = ver["minecraftVersionTypes"][0]["name"].as_str().unwrap_or("");
-        loader = is_loader(t).then(|| t.to_string());
-        lv = ver["minecraftVersionName"]["name"].as_str().unwrap_or("").to_string();
-    }
-    let loader = loader?;
-    let mut mc = ver["gameVersionDTO"]["name"].as_str().filter(|s| !s.is_empty()).map(String::from)
-        .or_else(|| side.and_then(|s| s["jar"].as_str()).filter(|s| !s.is_empty()).map(String::from))
-        .or_else(|| vj["inheritsFrom"].as_str().filter(|s| !s.is_empty()).map(String::from));
-    if mc.is_none() {
-        mc = libs.iter().find(|n| MC_LIBS.iter().any(|p| n.starts_with(p)) && n.matches(':').count() == 2).and_then(|n| n.split(':').nth(2)).map(String::from);
-    }
-    if mc.is_none() && loader == "forge" && lv.contains('-') {
-        let (a, b) = lv.split_once('-').unwrap();
-        mc = Some(a.to_string()); lv = b.to_string();
-    }
-    if mc.is_none() && loader == "neoforge" && Regex::new(r"^\d+\.\d+").unwrap().is_match(&lv) {
-        let p: Vec<&str> = lv.split('.').collect();
-        mc = Some(format!("1.{}{}", p[0], if p.get(1).map(|b| *b != "0").unwrap_or(false) { format!(".{}", p[1]) } else { String::new() }));
-    }
-    let mc = mc?;
-    if lv.starts_with(&format!("{mc}-")) { lv = lv[mc.len() + 1..].to_string(); }
-    Some((mp["name"].as_str().filter(|s| !s.is_empty()).unwrap_or(vid).to_string(), mc, loader, lv))
-}
-
-pub fn count_content(base: &Path) -> Map<String, Value> {
-    let mut out = Map::new();
-    for d in CONTENT_DIRS {
-        let n = std::fs::read_dir(base.join(d)).map(|rd| rd.flatten().filter(|e| e.path().is_file() && has_ext(&e.file_name().to_string_lossy())).count()).unwrap_or(0);
-        if n > 0 { out.insert(d.into(), json!(n)); }
-    }
-    out
-}
-
-fn sorted_dirs(p: &Path) -> Vec<PathBuf> {
-    let mut v: Vec<PathBuf> = std::fs::read_dir(p).map(|rd| rd.flatten().map(|e| e.path()).filter(|x| x.is_dir()).collect()).unwrap_or_default();
-    v.sort(); v
-}
-
-fn find_sources(root: &Path, id: &str, name: &str) -> Vec<Value> {
-    let names = [name.to_lowercase(), id.to_lowercase()];
-    let low = |p: &Path| p.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-    let mut cands: Vec<(&str, PathBuf)> = vec![];
-    let mp = root.join("modpacks");
-    let mp_dirs = if mp.is_dir() { sorted_dirs(&mp) } else { vec![] };
-    for d in &mp_dirs { if names.contains(&low(d)) { cands.push(("Modpack folder", d.clone())); } }
-    cands.push(("Version folder", root.join("versions").join(id)));
-    for d in &mp_dirs { if !names.contains(&low(d)) { cands.push(("Another modpack folder", d.clone())); } }
-    for d in sorted_dirs(root) {
-        let l = low(&d);
-        if SKIP_DIRS.contains(&l.as_str()) || l == "modpacks" { continue; }
-        cands.push(("Folder in TLauncher", d.clone()));
-        for sub in sorted_dirs(&d) {
-            let sl = sub.file_name().unwrap_or_default().to_string_lossy().to_string();
-            if !SKIP_DIRS.contains(&sl.to_lowercase().as_str()) && !CONTENT_DIRS.contains(&sl.as_str()) && sl != "config" { cands.push(("Folder in TLauncher", sub)); }
-        }
-    }
-    cands.push(("Main folder (shared by all versions)", root.to_path_buf()));
-    let (mut seen, mut out) = (std::collections::HashSet::new(), vec![]);
-    for (label, p) in cands {
-        let key = p.canonicalize().unwrap_or(p.clone());
-        if !p.is_dir() || !seen.insert(key) { continue; }
-        let c = count_content(&p);
-        if !c.is_empty() {
-            let total: i64 = c.values().filter_map(|v| v.as_i64()).sum();
-            out.push(json!({"label": label, "path": p.to_string_lossy(), "counts": c, "total": total}));
-        }
-    }
-    out
-}
-
-/// TLauncher versions that use a loader and weren't made by Orbit.
-pub fn scan(root: &Path) -> Vec<Value> {
-    let mut out = vec![];
-    for d in sorted_dirs(&root.join("versions")) {
-        if d.join(MARKER).exists() { continue; }
-        let id = d.file_name().unwrap().to_string_lossy().to_string();
-        let Some(vj) = read_json(&d.join(format!("{id}.json"))).filter(|v| v.is_object()) else { continue };
-        let side = read_json(&d.join("TLauncherAdditional.json")).filter(|v| v.is_object());
-        let Some((name, mc, loader, lv)) = detect(&id, &vj, side.as_ref()) else { continue };
-        let mp = side.as_ref().map(|s| s["modpack"].clone()).unwrap_or(Value::Null);
-        let mem = if mp["modpackMemory"] == true { mp["memory"].as_i64().unwrap_or(0) } else { 0 };
-        let sources = find_sources(root, &id, &name);
-        out.push(json!({"id": id, "name": name, "mc": mc, "loader": loader, "loader_version": lv, "modpack": side.is_some(),
-            "memory": if (512..=65536).contains(&mem) { mem } else { 0 }, "sources": sources}));
-    }
-    out
-}
 
 #[cfg(test)]
 mod tests {

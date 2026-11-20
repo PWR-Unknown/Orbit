@@ -6,7 +6,7 @@
 use crate::api::{run_job, Out, Req};
 use crate::mods::{self, Log};
 use crate::util::{self, download_file, Res};
-use crate::{icons, launcher, store, tl};
+use crate::{icons, launcher, meta, store};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -54,8 +54,6 @@ fn is_egg(egg: &str) -> bool { EGGS.iter().any(|e| e.key == egg) }
 fn rx(p: &str) -> Regex { Regex::new(p).unwrap() }
 fn s<'a>(v: &'a Value, k: &str) -> &'a str { v[k].as_str().unwrap_or("") }
 fn num(v: &Value) -> Option<i64> { v.as_i64().or_else(|| v.as_str().and_then(|x| x.trim().parse().ok())).or_else(|| v.as_f64().map(|f| f as i64)) }
-fn now() -> f64 { store::now() }
-fn vkey(s: &str) -> Vec<u64> { s.split(['.', '-']).map(|x| x.parse().unwrap_or(0)).collect() }
 fn err<T>(m: impl Into<String>) -> Res<T> { Err(m.into()) }
 
 
@@ -168,13 +166,13 @@ fn guess_mc(root: &Path, cfg: &Value) -> String {
     let neo = root.join("libraries/net/neoforged/neoforge");
     if neo.is_dir() {
         let mut vs = list_names(&neo);
-        vs.sort_by_key(|v| vkey(v));
+        vs.sort_by_key(|v| meta::vkey(v));
         if let Some(v) = vs.last() { return neo_mc(v); }
     }
     let srv = root.join("libraries/net/minecraft/server");
     if srv.is_dir() {
         let mut vs = list_names(&srv);
-        vs.sort_by_key(|v| vkey(v));
+        vs.sort_by_key(|v| meta::vkey(v));
         if let Some(v) = vs.last() { return v.split('-').next().unwrap_or("").into(); }
     }
     String::new()
@@ -297,7 +295,7 @@ struct Run {
 impl Run {
     fn new() -> Run {
         Run { alive: AtomicBool::new(true), ready: AtomicBool::new(false), stopping: AtomicBool::new(false), pid: AtomicU32::new(0),
-              started: now(), lines: Mutex::new((vec![], 0)), stdin: Mutex::new(None) }
+              started: store::now(), lines: Mutex::new((vec![], 0)), stdin: Mutex::new(None) }
     }
     fn add(&self, line: impl Into<String>) {
         let mut g = self.lines.lock().unwrap_or_else(|e| e.into_inner());
@@ -327,7 +325,7 @@ pub fn status(name: &str, root: &Path) -> Value {
         let mem = procs.iter().filter(|p| p.pid == pid).map(|p| p.mb).chain(procs_for(root).iter().map(|p| p.mb)).fold(0.0, f64::max);
         let state = if run.stopping.load(Relaxed) { "stopping" } else if run.ready.load(Relaxed) { "running" } else { "starting" };
         return json!({"running": true, "state": state, "managed": true, "pid": if pid != 0 { json!(pid) } else { Value::Null },
-                      "ram_mb": mem as i64, "uptime": (now() - run.started) as i64});
+                      "ram_mb": mem as i64, "uptime": (store::now() - run.started) as i64});
     }
     let ext = procs_for(root);
     if let Some(best) = ext.iter().max_by(|a, b| a.mb.partial_cmp(&b.mb).unwrap_or(std::cmp::Ordering::Equal)) {
@@ -418,7 +416,7 @@ fn set_label(msg: &str) { if let Some(t) = util::track() { t.lock().unwrap_or_el
 /// Java for a Minecraft version: the user's pick, else Mojang's runtime for that version, else system Java.
 fn get_java(mc: &str, cfg_java: &str) -> Res<String> {
     let mut prof = json!({"javaVersion": {"component": "java-runtime-delta", "majorVersion": 21}});
-    if !mc.is_empty() { prof = tl::vanilla_profile(mc).unwrap_or(json!({})); }
+    if !mc.is_empty() { prof = meta::vanilla_profile(mc).unwrap_or(json!({})); }
     let mut st = store::settings();
     if !cfg_java.is_empty() { st.insert("java_path".into(), json!(cfg_java)); }
     let j = launcher::find_java(&prof, &st, &store::meta_dir(), &|m: &str, _f: f64| set_label(m))?;
@@ -646,7 +644,7 @@ pub fn detail(name: &str) -> Res {
 // ---------------------------------------------------------------- eggs: versions + install
 
 fn mc_releases() -> Res<Vec<String>> {
-    let m = util::get_json(tl::MANIFEST)?;
+    let m = util::get_json(meta::MANIFEST)?;
     Ok(m["versions"].as_array().into_iter().flatten().filter(|v| v["type"] == "release").filter_map(|v| v["id"].as_str().map(String::from)).collect())
 }
 
@@ -666,7 +664,7 @@ fn papermc_versions(project: &str) -> Res<Vec<String>> {
     let st = rx(r"^\d+(\.\d+)*$");
     let stable: Vec<String> = out.iter().filter(|v| st.is_match(v)).cloned().collect();
     let mut v = if stable.is_empty() { out } else { stable };
-    v.sort_by_key(|x| std::cmp::Reverse(vkey(x)));
+    v.sort_by_key(|x| std::cmp::Reverse(meta::vkey(x)));
     Ok(v)
 }
 
@@ -701,7 +699,7 @@ pub fn egg_versions(egg: &str) -> Res {
         "forge" => {
             let m = util::get_json("https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json")?;
             let mut k: Vec<String> = m.as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
-            k.sort_by_key(|x| std::cmp::Reverse(vkey(x)));
+            k.sort_by_key(|x| std::cmp::Reverse(meta::vkey(x)));
             k
         }
         _ => {
@@ -709,7 +707,7 @@ pub fn egg_versions(egg: &str) -> Res {
             let mut set: Vec<String> = all["versions"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).filter(|v| !v.contains('-')).map(neo_mc).filter(|v| !v.is_empty()).collect();
             set.sort();
             set.dedup();
-            set.sort_by_key(|x| std::cmp::Reverse(vkey(x)));
+            set.sort_by_key(|x| std::cmp::Reverse(meta::vkey(x)));
             set
         }
     };
@@ -719,7 +717,7 @@ pub fn egg_versions(egg: &str) -> Res {
 }
 
 pub fn loader_versions(egg: &str, mc: &str) -> Res {
-    if ["fabric", "quilt", "forge", "neoforge"].contains(&egg) { return tl::loader_versions(egg, mc); }
+    if ["fabric", "quilt", "forge", "neoforge"].contains(&egg) { return meta::loader_versions(egg, mc); }
     Ok(json!({"versions": [], "stable": "", "latest": ""}))
 }
 
@@ -763,7 +761,7 @@ fn install_egg(root: &Path, egg: &str, mc: &str, lv: &str) -> Res<Map<String, Va
     let jar = |out: &mut Map<String, Value>, j: &str| { out.insert("jar".into(), json!(j)); };
     match egg {
         "vanilla" => {
-            let d = tl::vanilla_profile(mc)?["downloads"]["server"].clone();
+            let d = meta::vanilla_profile(mc)?["downloads"]["server"].clone();
             if d.is_null() { return err(format!("Minecraft {mc} has no server download.")); }
             download_file(s(&d, "url"), root, "server.jar", Some("sha1"), d["sha1"].as_str())?;
             jar(&mut out, "server.jar");
@@ -804,7 +802,7 @@ fn install_egg(root: &Path, egg: &str, mc: &str, lv: &str) -> Res<Map<String, Va
             jar(&mut out, "quilt-server-launch.jar");
         }
         "forge" | "neoforge" => {
-            let (v, url) = tl::installer_info(egg, mc, if lv.is_empty() { None } else { Some(lv) })?;
+            let (v, url) = meta::installer_info(egg, mc, if lv.is_empty() { None } else { Some(lv) })?;
             download_file(&url, root, "installer.jar", None, None)?;
             run_cmd(&[get_java(mc, "")?, "-jar".into(), "installer.jar".into(), "--installServer".into()], root, &format!("Installing {}", info.name))?;
             let _ = std::fs::remove_file(root.join("installer.jar"));
@@ -1063,7 +1061,7 @@ pub fn start_scheduler() {
     std::thread::spawn(|| loop {
         std::thread::sleep(Duration::from_secs(10));
         let Some(off) = tz_offset_secs() else { continue };
-        let local = now() as i64 + off;
+        let local = store::now() as i64 + off;
         let sod = local.rem_euclid(86400);
         let Ok(rd) = std::fs::read_dir(servers_dir()) else { continue };
         for e in rd.flatten() {
@@ -1087,7 +1085,7 @@ pub fn start_scheduler() {
             // "ready" is read from the console; if that line was never recognised, a server that has been up for a
             // few minutes still counts, so the schedule can't be silently skipped
             let Some(run) = run_of(&name).filter(|r| r.alive.load(Relaxed) && !r.stopping.load(Relaxed)
-                && (r.ready.load(Relaxed) || now() - r.started > 180.0)) else { continue };
+                && (r.ready.load(Relaxed) || store::now() - r.started > 180.0)) else { continue };
             std::thread::spawn(move || scheduled_restart(&name, run, countdown));
         }
     });

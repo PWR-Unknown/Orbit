@@ -11,11 +11,11 @@ mod gamedata;
 mod icons;
 mod importers;
 mod launcher;
+mod meta;
 mod mods;
 mod optimization;
 mod servers;
 mod store;
-mod tl;
 mod util;
 
 use std::collections::HashMap;

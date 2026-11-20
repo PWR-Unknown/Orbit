@@ -4,7 +4,7 @@
 //! The player is either a Microsoft/Mojang account (see auth.rs) or an offline player.
 use crate::auth::Identity;
 use crate::store::{self, Instance};
-use crate::tl;
+use crate::meta;
 use crate::util::{download_file, get_json, run_parallel, sha1_file, Res};
 use md5::{Digest, Md5};
 use regex::Regex;
@@ -93,13 +93,13 @@ pub fn profile_for(inst: &Instance, meta: &Path) -> Res {
     let (mc, loader) = (inst.mc(), inst.loader());
     let lv = inst.state["config"]["loader_version"].as_str().filter(|s| !s.is_empty());
     let key = profile_key(inst);
-    let vanilla = tl::vanilla_profile(&mc)?;
+    let vanilla = meta::vanilla_profile(&mc)?;
     let merged = if loader == "vanilla" { let mut v = vanilla.clone(); v["id"] = json!(key); v } else {
-        let prof = if tl::meta_url(&loader).is_some() { tl::meta_profile(&loader, &mc, lv)?.0 } else {
+        let prof = if meta::meta_url(&loader).is_some() { meta::meta_profile(&loader, &mc, lv)?.0 } else {
             std::fs::create_dir_all(meta).map_err(|e| e.to_string())?;
-            tl::installer_profile(&loader, &mc, meta, lv)?.0
+            meta::installer_profile(&loader, &mc, meta, lv)?.0
         };
-        tl::merge(&vanilla, &prof, &key)?
+        meta::merge(&vanilla, &prof, &key)?
     };
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     std::fs::write(&path, serde_json::to_string_pretty(&merged).unwrap()).map_err(|e| e.to_string())?;
@@ -298,7 +298,7 @@ pub fn find_java(profile: &Value, settings: &Map<String, Value>, meta: &Path, pr
         match ensure_runtime(&comp, meta, prog) { Ok(p) => return Ok(p), Err(e) => err = Some(e) }
     }
     // Java 8 era (1.16.5 and older) can't run on a newer system Java, so only an exact match is acceptable there.
-    if let Some(sj) = tl::find_java_on_path() { let m = java_major(&sj); if if want <= 8 { m == 8 } else { m >= want } { return Ok(sj); } }
+    if let Some(sj) = meta::find_java_on_path() { let m = java_major(&sj); if if want <= 8 { m == 8 } else { m >= want } { return Ok(sj); } }
     Err(format!("Java {want} is needed and couldn't be downloaded{}. Install it or choose one in Settings > Launch.", err.map(|e| format!(" ({e})")).unwrap_or_default()))
 }
 

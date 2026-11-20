@@ -2,7 +2,7 @@
 //! ui/index.html works as it is. Errors are plain strings -> HTTP 400 (NOT_PORTED: prefix -> 501).
 use crate::mods::{self, Log};
 use crate::util::{SharedTrack, Track};
-use crate::{auth, dialogs, gamedata, icons, importers, launcher, optimization, servers, store, tl};
+use crate::{auth, dialogs, gamedata, icons, importers, launcher, meta, optimization, servers, store};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -151,7 +151,8 @@ fn settings(r: &Req) -> Res {
         if let Some(n) = b["close_timer"].as_i64() { st.insert("close_timer".into(), json!(n.clamp(0, 120))); }
         if let Some(a) = b["animations"].as_bool() { st.insert("animations".into(), json!(a)); } // theme animations on/off
         if let Some(n) = b["snow_height"].as_i64() { st.insert("snow_height".into(), json!(n.clamp(4, 100))); } // Christmas: max snow pile height (px)
-        if let Some(n) = b["snow_speed"].as_i64() { st.insert("snow_speed".into(), json!(n.clamp(10, 300))); } // Christmas: snowfall speed (%)
+        if let Some(o) = b["ui_flags"].as_object().filter(|o| serde_json::to_string(o).map(|t| t.len() <= 20000).unwrap_or(false)) { st.insert("ui_flags".into(), serde_json::Value::Object(o.clone())); } // small UI flags (tour seen, pinned instances, ...)
+        if let Some(n) = b["snow_speed"].as_i64() { st.insert("snow_speed".into(), json!(n.clamp(10, 1000))); } // Christmas: snowfall speed (%)
         // minutes east of UTC, reported by the window; the daily server restart uses it to read the local clock
         if let Some(o) = b["tz_offset"].as_i64().filter(|o| (-840..=840).contains(o)) { st.insert("tz_offset".into(), json!(o)); }
         let mut accts = accounts(&st);
@@ -227,6 +228,7 @@ fn settings(r: &Req) -> Res {
         "close_warning": store::close_warning(), "close_timer": store::close_timer(),
         "animations": st.get("animations").and_then(|v| v.as_bool()).unwrap_or(true),
         "snow_height": store::snow_height(), "snow_speed": store::snow_speed(),
+        "ui_flags": st.get("ui_flags").cloned().unwrap_or(json!({})),
         "mr_dir": store::mr_root().to_string_lossy(), "mr_default": store::default_modrinth_dir().to_string_lossy(),
         "mr_is_default": g("modrinth_dir").is_empty(),
         "cfa_dir": store::cfapp_root().to_string_lossy(), "cfa_default": store::default_curseforge_dir().to_string_lossy(),
@@ -380,7 +382,7 @@ fn loader_versions(loader: &str, mc: &str) -> Res {
     if !mods::is_loader(loader) || !re(r"^[A-Za-z0-9._\-]{1,32}$").is_match(mc) { return Err("bad loader or game version".into()); }
     let k = (loader.to_string(), mc.to_string());
     if let Some((_, t, v)) = LVCACHE.lock().unwrap().iter().find(|(c, _, _)| *c == k) { if t.elapsed().as_secs() < 600 { return Ok(v.clone()); } }
-    let v = tl::loader_versions(loader, mc)?;
+    let v = meta::loader_versions(loader, mc)?;
     let mut c = LVCACHE.lock().unwrap();
     c.retain(|(x, _, _)| *x != k);
     c.push((k, Instant::now(), v.clone()));
@@ -914,7 +916,7 @@ fn instance_action(r: &Req, iid: &str, act: &str) -> Result<Out, String> {
             if !p.starts_with(&inst.root) { return Err("No icon.".into()); }
             match icons::icon_for(&p) { Some((b, ct)) => Ok(Out::Bytes(b, ct)), None => Err("No icon.".into()) }
         }
-        (_, "tlauncher") => { let (iid2, root) = (iid.to_string(), store::tl_root()); json_out(tl::export(&inst, &iid2, &root)) }
+        (_, "tlauncher") => { let (iid2, root) = (iid.to_string(), store::tl_root()); json_out(importers::export_to_tlauncher(&inst, &iid2, &root)) }
         (_, "open") => { let _ = std::fs::create_dir_all(inst.root.join("mods")); open_folder(&inst.root); Ok(Out::Json(json!({"ok": true}))) }
         _ => Err("unknown action".into()),
     }
@@ -997,7 +999,7 @@ pub fn route(r: &Req) -> Result<Out, String> {
         "/api/import/inspect" => {
             let pth = Path::new(qs("path"));
             if !pth.is_dir() { return Err("That folder doesn't exist.".into()); }
-            let c = tl::count_content(pth);
+            let c = importers::count_content(pth);
             let total: i64 = c.values().filter_map(|v| v.as_i64()).sum();
             return j(Ok(json!({"path": pth.to_string_lossy(), "counts": c, "total": total})));
         }

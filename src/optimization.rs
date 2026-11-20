@@ -85,7 +85,7 @@ pub fn ceilings(newest_supported: impl Fn(&str) -> Option<String>) -> BTreeMap<S
 /// decided per mod when resolving, never assumed here.
 pub fn check(loader: &str, mc: &str, ceilings: &BTreeMap<String, String>) -> Result<(), String> {
     if !SUPPORTED.contains(&loader) { return Err("Add Optimization works with Fabric and NeoForge instances.".into()); }
-    let name = crate::tl::label(loader);
+    let name = crate::meta::label(loader);
     match ceilings.get(loader) {
         None => Err(format!("Add Optimization has no target game version for {name}.")),
         Some(c) => match (parse_ver(mc), parse_ver(c)) {
@@ -138,7 +138,7 @@ fn evaluate(hit: &Value, mc: &str, loader: &str, memo: &Mutex<HashMap<String, Re
     let net = |e: String| if is_net(&e) { Reject::Net(e) } else { Reject::Skip(e) };
     let version = mods::best_version(&pid, mc, Some(loader)).map_err(net)?
         .filter(|v| fits(v, mc, loader))
-        .ok_or_else(|| Reject::Skip(format!("no build for {} {mc}", crate::tl::label(loader))))?;
+        .ok_or_else(|| Reject::Skip(format!("no build for {} {mc}", crate::meta::label(loader))))?;
     let (mut incompatible, mut required) = (HashSet::new(), HashSet::new());
     for dep in version["dependencies"].as_array().into_iter().flatten() {
         match dep["dependency_type"].as_str() {
@@ -147,7 +147,7 @@ fn evaluate(hit: &Value, mc: &str, loader: &str, memo: &Mutex<HashMap<String, Re
                 let Some(dp) = dep_project(dep).map_err(net)? else { continue };
                 if dp != pid {
                     if !has_build(&dp, mc, loader, memo).map_err(net)? {
-                        return Err(Reject::Skip(format!("needs a library that has no {} {mc} build", crate::tl::label(loader))));
+                        return Err(Reject::Skip(format!("needs a library that has no {} {mc} build", crate::meta::label(loader))));
                     }
                     required.insert(dp);
                 }
@@ -180,7 +180,7 @@ fn resolve(mc: &str, loader: &str) -> Result<Plan, String> {
         .map_err(|e| if is_net(&e) { OFFLINE.to_string() } else { format!("Couldn't look up optimization mods ({e}).") })?;
     let hits: Vec<Value> = res["hits"].as_array().cloned().unwrap_or_default();
     if hits.is_empty() {
-        return Err(format!("Modrinth lists no optimization mods for {} {mc} yet.", crate::tl::label(loader)));
+        return Err(format!("Modrinth lists no optimization mods for {} {mc} yet.", crate::meta::label(loader)));
     }
     let memo = Mutex::new(HashMap::new());
     let results = mods::par_map(&hits, 6, |h| evaluate(h, mc, loader, &memo));
@@ -195,7 +195,7 @@ fn resolve(mc: &str, loader: &str) -> Result<Plan, String> {
     if ranked.is_empty() {
         return Err(match net_err {
             Some(_) => OFFLINE.to_string(),
-            None => format!("None of the optimization mods on Modrinth have a compatible {} {mc} build.", crate::tl::label(loader)),
+            None => format!("None of the optimization mods on Modrinth have a compatible {} {mc} build.", crate::meta::label(loader)),
         });
     }
     let (picks, clashed) = select(ranked, MAX_MODS);
@@ -265,7 +265,7 @@ pub fn apply(inst: &mut Instance, log: &mut Log) -> Value {
             if let Some(i) = [pos(a), pos(b)].into_iter().flatten().max() { victims.push((i, why.clone())); }
         }
         for (f, range) in &rep.mc_mismatch { if let Some(i) = pos(f) { victims.push((i, format!("built for Minecraft {range}, not {mc}"))); } }
-        for (f, _) in &rep.wrong_loader { if let Some(i) = pos(f) { victims.push((i, format!("isn't a {} mod", crate::tl::label(&loader)))); } }
+        for (f, _) in &rep.wrong_loader { if let Some(i) = pos(f) { victims.push((i, format!("isn't a {} mod", crate::meta::label(&loader)))); } }
         victims.sort_by_key(|v| v.0);
         victims.dedup_by_key(|v| v.0);
         for (i, why) in victims.iter().rev() {

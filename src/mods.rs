@@ -625,25 +625,27 @@ fn pairs(params: &[(&str, String)]) -> Vec<(String, String)> {
     params.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
 }
 
-/// Modrinth GET. 404 -> Null.
-pub fn api_get(path: &str, params: &[(&str, String)]) -> Res {
-    let mut req = agent(30).get(&format!("{}{path}", api_base()));
-    for (k, v) in pairs(params) { req = req.query(&k, &v); }
-    match req.call() {
+/// Shared reply handling for the Modrinth and CurseForge calls: 404 -> Null, other failures -> readable errors.
+/// `service` names the API in errors; `key_rejected` is the message for a 401/403 (None = treat like any status error).
+fn api_reply(r: Result<ureq::Response, ureq::Error>, service: &str, key_rejected: Option<&str>) -> Res {
+    match r {
         Ok(r) => r.into_json().map_err(|e| e.to_string()),
         Err(ureq::Error::Status(404, _)) => Ok(Value::Null),
-        Err(ureq::Error::Status(c, _)) => Err(format!("Modrinth API error {c}")),
+        Err(ureq::Error::Status(401 | 403, _)) if key_rejected.is_some() => Err(key_rejected.unwrap_or_default().to_string()),
+        Err(ureq::Error::Status(c, _)) => Err(format!("{service} API error {c}")),
         Err(ureq::Error::Transport(t)) => Err(format!("Network error: {t}")),
     }
 }
 
+/// Modrinth GET. 404 -> Null.
+pub fn api_get(path: &str, params: &[(&str, String)]) -> Res {
+    let mut req = agent(30).get(&format!("{}{path}", api_base()));
+    for (k, v) in pairs(params) { req = req.query(&k, &v); }
+    api_reply(req.call(), "Modrinth", None)
+}
+
 pub fn api_post(path: &str, body: &Value) -> Res {
-    match agent(60).post(&format!("{}{path}", api_base())).send_json(body) {
-        Ok(r) => r.into_json().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(404, _)) => Ok(Value::Null),
-        Err(ureq::Error::Status(c, _)) => Err(format!("Modrinth API error {c}")),
-        Err(ureq::Error::Transport(t)) => Err(format!("Network error: {t}")),
-    }
+    api_reply(agent(60).post(&format!("{}{path}", api_base())).send_json(body), "Modrinth", None)
 }
 
 pub fn cf_get(path: &str, params: &[(&str, String)]) -> Res {
@@ -653,13 +655,7 @@ pub fn cf_get(path: &str, params: &[(&str, String)]) -> Res {
     }
     let mut req = agent(30).get(&format!("{CF_API}{path}")).set("x-api-key", &key).set("Accept", "application/json");
     for (k, v) in pairs(params) { req = req.query(&k, &v); }
-    match req.call() {
-        Ok(r) => r.into_json().map_err(|e| e.to_string()),
-        Err(ureq::Error::Status(404, _)) => Ok(Value::Null),
-        Err(ureq::Error::Status(c, _)) if c == 401 || c == 403 => Err("CurseForge rejected the API key. Check it and try again.".into()),
-        Err(ureq::Error::Status(c, _)) => Err(format!("CurseForge API error {c}")),
-        Err(ureq::Error::Transport(t)) => Err(format!("Network error: {t}")),
-    }
+    api_reply(req.call(), "CurseForge", Some("CurseForge rejected the API key. Check it and try again."))
 }
 
 pub fn host_allowed(url: &str) -> bool {
@@ -690,8 +686,8 @@ fn loader_dependency(inst: &Instance) -> Result<Map<String, Value>, String> {
     let mut v = cfg["loader_version"].as_str().unwrap_or("").to_string();
     if v.is_empty() {
         let mc = cfg["mc"].as_str().unwrap_or("");
-        v = crate::tl::loader_versions(loader, mc)
-            .map_err(|e| format!("Couldn't work out which {} version this instance uses: {e}", crate::tl::label(loader)))?["stable"]
+        v = crate::meta::loader_versions(loader, mc)
+            .map_err(|e| format!("Couldn't work out which {} version this instance uses: {e}", crate::meta::label(loader)))?["stable"]
             .as_str().unwrap_or("").to_string();
     }
     let mut m = Map::new();

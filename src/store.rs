@@ -80,7 +80,7 @@ pub fn close_timer() -> u64 { settings().get("close_timer").and_then(|v| v.as_u6
 /// Settings > Appearance > Christmas snow: the tallest the snow pile on the floor may grow, in px (4 to 100, default 34)...
 pub fn snow_height() -> u64 { settings().get("snow_height").and_then(|v| v.as_u64()).unwrap_or(34).clamp(4, 100) }
 /// ...and how fast it falls, in percent of the normal speed (10 to 300, default 100).
-pub fn snow_speed() -> u64 { settings().get("snow_speed").and_then(|v| v.as_u64()).unwrap_or(100).clamp(10, 300) }
+pub fn snow_speed() -> u64 { settings().get("snow_speed").and_then(|v| v.as_u64()).unwrap_or(100).clamp(10, 1000) }
 
 fn setting_path(key: &str, default: PathBuf) -> PathBuf {
     settings().get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or(default)
