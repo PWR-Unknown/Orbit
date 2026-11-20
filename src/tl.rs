@@ -1,5 +1,5 @@
 //! Version profiles, loader versions, TLauncher export/import (port of tlauncher.py).
-use crate::mods::{is_loader, Log};
+use crate::mods::is_loader;
 use crate::store::Instance;
 use crate::util::{download_file, get_json, get_text, Res};
 use regex::Regex;
@@ -391,9 +391,6 @@ pub fn scan(root: &Path) -> Vec<Value> {
     }
     out
 }
-
-#[allow(dead_code)]
-pub fn _unused(_: &mut Log) {}
 
 #[cfg(test)]
 mod tests {

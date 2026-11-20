@@ -1,6 +1,6 @@
 //! Import instances from other launchers (port of importers.py): Modrinth App, CurseForge app, TLauncher.
 use crate::mods::{self, content_path, disabled_path, is_loader};
-use crate::modrinth::{api_get, api_post, jl};
+use crate::mods::{api_get, api_post, jl};
 use crate::store::Instance;
 use crate::tl;
 use crate::util::{sha1_file, Res};

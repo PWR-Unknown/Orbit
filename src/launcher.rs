@@ -3,7 +3,6 @@
 //!   3. extract natives   4. find Java   5. build the command line and spawn the game
 //! The player is either a Microsoft/Mojang account (see auth.rs) or an offline player.
 use crate::auth::Identity;
-use crate::mods::Log;
 use crate::store::{self, Instance};
 use crate::tl;
 use crate::util::{download_file, get_json, run_parallel, sha1_file, Res};
@@ -379,17 +378,49 @@ fn build_command(profile: &Value, plan: &Plan, java: &Path, inst_root: &Path, wh
 
 // ---------- running ----------
 
-pub fn start(inst_root: &Path, iid: &str, name: &str, settings: Map<String, Value>, meta: PathBuf, quick: Option<(String, String)>) -> Res {
-    let st = json!({"status": "installing", "message": "Starting...", "progress": 0.0, "name": name, "error": "", "started": store::now()});
-    let busy = with_run(|m| {
-        if matches!(m.get(iid).and_then(|s| s["status"].as_str()), Some("installing") | Some("running")) { return true; }
-        m.insert(iid.to_string(), st.clone()); false
-    });
-    if busy { return Err(format!("{name} is already running.")); }
-    let (root, iid2) = (inst_root.to_path_buf(), iid.to_string());
+fn is_active(v: &Value) -> bool { matches!(v["status"].as_str(), Some("installing") | Some("running")) }
+
+/// True while any run (installing or playing) of this instance is live, whichever account it plays as.
+pub fn instance_busy(iid: &str) -> bool {
+    with_run(|m| m.values().any(|s| is_active(s) && s["iid"].as_str() == Some(iid)))
+}
+
+/// Which account a run plays as: (display name, key "ms:<id>" / "off:<name>"). `settings` already holds any override.
+fn account_of(settings: &Map<String, Value>) -> (String, String) {
+    let active = settings.get("ms_active").and_then(|v| v.as_str()).unwrap_or("");
+    if !active.is_empty() {
+        if let Some(a) = crate::auth::accounts().into_iter().find(|a| a["id"] == active) { return (a["name"].as_str().unwrap_or("").to_string(), format!("ms:{active}")); }
+    }
+    let n = settings.get("username").and_then(|v| v.as_str()).filter(|n| !n.is_empty()).unwrap_or("Player").to_string();
+    (n.clone(), format!("off:{n}"))
+}
+
+/// Starts the game. The first run of an instance is keyed by the instance id. While it is still going, `extra` = true
+/// starts one more run of the same instance (key "<iid>@2", "<iid>@3", ...) under `account` = ("ms" | "offline", id | name).
+pub fn start(inst_root: &Path, iid: &str, name: &str, mut settings: Map<String, Value>, meta: PathBuf, quick: Option<(String, String)>, account: Option<(String, String)>, extra: bool) -> Res {
+    if let Some((kind, val)) = &account {
+        match kind.as_str() {
+            "ms" => { if !crate::auth::accounts().iter().any(|a| a["id"] == val.as_str()) { return Err("That Microsoft account isn't signed in.".into()); } settings.insert("ms_active".into(), json!(val)); }
+            "offline" => { settings.insert("ms_active".into(), json!("")); settings.insert("username".into(), json!(val)); }
+            _ => return Err("Unknown account type.".into()),
+        }
+    }
+    let (label, akey) = account_of(&settings);
+    let mut st = json!({"status": "installing", "message": "Starting...", "progress": 0.0, "name": name, "error": "", "started": store::now(), "iid": iid, "account": label, "acct": akey});
+    let key = with_run(|m| {
+        let key = if !m.get(iid).map(is_active).unwrap_or(false) { iid.to_string() }
+            else if extra {
+                if m.values().any(|s| is_active(s) && s["iid"].as_str() == Some(iid) && s["acct"] == st["acct"]) { return Err(format!("{name} is already running as {label}.")); }
+                match (2..).map(|n| format!("{iid}@{n}")).find(|k| !m.get(k).map(is_active).unwrap_or(false)) { Some(k) => k, None => return Err("Too many runs.".into()) }
+            } else { return Err(format!("{name} is already running.")) };
+        st["run"] = json!(key);
+        m.insert(key.clone(), st.clone());
+        Ok(key)
+    })?;
+    let (root, iid2, key2) = (inst_root.to_path_buf(), iid.to_string(), key.clone());
     std::thread::spawn(move || {
-        if let Err(e) = run(&iid2, &root, &settings, &meta, quick) { update(&iid2, |s| { s["status"] = json!("error"); s["error"] = json!(e); }); }
-        PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).remove(&iid2);
+        if let Err(e) = run(&key2, &iid2, &root, &settings, &meta, quick) { update(&key2, |s| { s["status"] = json!("error"); s["error"] = json!(e); }); }
+        PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).remove(&key2);
     });
     Ok(st)
 }
@@ -430,11 +461,13 @@ fn close_game(iid: &str) {
     if let Some(c) = PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).get_mut(iid) { let _ = c.kill(); }
 }
 
-fn add_play(root: &Path, secs: f64) {
+/// Credits `secs` of play to the instance: its own counters (last played, total) and the persistent playtime history.
+fn add_play(root: &Path, session: &str, start: f64, account: &str, secs: i64) {
     let mut inst = Instance::open(root);
     inst.state["last_played"] = json!(store::now());
-    inst.state["played_seconds"] = json!(inst.state["played_seconds"].as_i64().unwrap_or(0) + secs as i64);
+    inst.state["played_seconds"] = json!(inst.state["played_seconds"].as_i64().unwrap_or(0) + secs);
     let _ = inst.save();
+    store::playtime_add(root, session, start, account, secs);
 }
 
 /// Before the game starts: fetch what the installed mods need and don't have. Best effort, never blocks a launch.
@@ -457,9 +490,9 @@ fn auto_deps(iid: &str, root: &Path, prog: &dyn Fn(&str, f64)) {
     }
 }
 
-fn run(iid: &str, inst_root: &Path, settings: &Map<String, Value>, meta: &Path, quick: Option<(String, String)>) -> Res<()> {
+fn run(iid: &str, real_iid: &str, inst_root: &Path, settings: &Map<String, Value>, meta: &Path, quick: Option<(String, String)>) -> Res<()> {
     let prog = |msg: &str, frac: f64| { let m = msg.to_string(); update(iid, |s| { s["message"] = json!(m); s["progress"] = json!((frac * 1000.0).round() / 1000.0); }); };
-    if crate::servers::auto_deps() { auto_deps(iid, inst_root, &prog); }
+    if iid == real_iid && crate::servers::auto_deps() { auto_deps(iid, inst_root, &prog); }   // an extra run starts beside a game that is already set up
     let inst = Instance::open(inst_root);
     let icfg = inst.state["settings"].as_object().cloned().unwrap_or_default();
     let who = crate::auth::identity(settings)?;
@@ -479,10 +512,11 @@ fn run(iid: &str, inst_root: &Path, settings: &Map<String, Value>, meta: &Path, 
     let mut cmd = build_command(&profile, &plan, &java, inst_root, &who, mem, &extra, quick.as_ref().map(|(a, b)| (a.as_str(), b.as_str())));
     let logs = inst_root.join("logs");
     std::fs::create_dir_all(&logs).map_err(|e| e.to_string())?;
-    let log_path = logs.join("quarry-launch.log");
+    let suffix = iid.strip_prefix(real_iid).and_then(|r| r.strip_prefix('@')).map(|n| format!("-{n}")).unwrap_or_default();
+    let log_path = logs.join(format!("quarry-launch{suffix}.log"));
     let logf = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
     if cmd.iter().map(|c| c.len() + 1).sum::<usize>() > 30000 {                   // Windows command-line limit
-        let argfile = inst_root.join("quarry-args.txt");
+        let argfile = inst_root.join(format!("quarry-args{suffix}.txt"));
         let body = cmd[1..].iter().map(|a| format!("\"{}\"", a.replace('\\', "\\\\").replace('"', "\\\""))).collect::<Vec<_>>().join("\n");
         std::fs::write(&argfile, body).map_err(|e| e.to_string())?;
         cmd = vec![cmd[0].clone(), format!("@{}", argfile.display())];
@@ -496,17 +530,21 @@ fn run(iid: &str, inst_root: &Path, settings: &Map<String, Value>, meta: &Path, 
     let pid = child.id();
     PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(iid.to_string(), child);
     update(iid, |s| { s["status"] = json!("running"); s["message"] = json!("Running"); s["progress"] = json!(1.0); s["pid"] = json!(pid); s["log"] = json!(log_path.to_string_lossy()); });
-    add_play(inst_root, 0.0);
-    let mut mark = Instant::now();
+    let (acct_name, _) = account_of(settings);
+    let started = store::now();
+    let session = format!("{}-{}", (started * 1000.0) as u64, iid);
+    add_play(inst_root, &session, started, &acct_name, 0);
+    let mut counted: i64 = 0;                                                       // whole seconds already credited
+    let mut last_flush = Instant::now();
     let status = loop {
         let done = PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).get_mut(iid).map(|c| c.try_wait());
         match done { Some(Ok(Some(st))) => break st, Some(Ok(None)) => {}, _ => break std::process::ExitStatus::default() }
-        if mark.elapsed() >= Duration::from_secs(60) { add_play(inst_root, mark.elapsed().as_secs_f64()); mark = Instant::now(); }
+        if last_flush.elapsed() >= Duration::from_secs(60) { let now_s = t0.elapsed().as_secs() as i64; add_play(inst_root, &session, started, &acct_name, now_s - counted); counted = now_s; last_flush = Instant::now(); }
         std::thread::sleep(Duration::from_millis(500));
     };
     PROCS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).remove(iid);
-    add_play(inst_root, mark.elapsed().as_secs_f64());
     let secs = t0.elapsed().as_secs();
+    add_play(inst_root, &session, started, &acct_name, secs as i64 - counted);
     let rc = status.code();
     #[cfg(unix)] let signalled = { use std::os::unix::process::ExitStatusExt; status.signal() };
     #[cfg(not(unix))] let signalled: Option<i32> = None;
@@ -518,9 +556,6 @@ fn run(iid: &str, inst_root: &Path, settings: &Map<String, Value>, meta: &Path, 
     } else { update(iid, |s| { s["status"] = json!("idle"); s["message"] = json!(""); }); }
     Ok(())
 }
-
-#[allow(dead_code)]
-pub fn _unused(_: &mut Log) {}
 
 #[cfg(test)]
 mod tests {

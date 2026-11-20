@@ -7,7 +7,7 @@
 //!   Bukkit / Spigot / Paper  plugin.yml, paper-plugin.yml      Velocity  velocity-plugin.json      Bungee  bungee.yml
 //! works out what is missing, maps the missing ids to Modrinth projects and installs them (`ensure`).
 //! The same inventory feeds the crash diagnostics (`diagnose.rs`).
-use crate::modrinth::api_get;
+use crate::mods::api_get;
 use crate::mods::Log;
 use crate::util::Res;
 use serde_json::{json, Value};
@@ -27,7 +27,6 @@ pub struct ModInfo {
     pub file: String,
     pub path: PathBuf,
     pub disabled: bool,
-    pub size: u64,
     pub platforms: Vec<&'static str>,
     /// Primary id first, then what it `provides`.
     pub ids: Vec<String>,
@@ -228,7 +227,7 @@ fn fill<R: Read + Seek>(z: &mut zip::ZipArchive<R>, mi: &mut ModInfo, depth: u8)
 pub fn read_jar(path: &Path) -> ModInfo {
     let file = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let mut mi = ModInfo { file: file.clone(), path: path.to_path_buf(), disabled: file.to_lowercase().ends_with(".disabled"),
-        size: std::fs::metadata(path).map(|m| m.len()).unwrap_or(0), env: "*".into(), ..Default::default() };
+        env: "*".into(), ..Default::default() };
     match std::fs::File::open(path) {
         Err(e) => mi.error = Some(format!("can't be opened ({e})")),
         Ok(f) => match zip::ZipArchive::new(f) {
@@ -470,7 +469,7 @@ pub fn analyze(inv: &[ModInfo], ctx: &Ctx) -> Report {
 // ---------------------------------------------------------------- finding the Modrinth project
 
 #[derive(Clone, Debug)]
-pub struct Resolved { pub pid: String, pub slug: String, pub title: String }
+pub struct Resolved { pub pid: String, pub title: String }
 
 const ALIASES: [(&str, &str); 12] = [
     ("fabric", "fabric-api"), ("architectury", "architectury-api"), ("owo", "owo-lib"), ("kotlinforforge", "kotlin-for-forge"),
@@ -492,7 +491,7 @@ fn project_ok(p: &Value, ctx: &Ctx) -> bool {
 }
 
 fn as_resolved(p: &Value) -> Option<Resolved> {
-    Some(Resolved { pid: p["id"].as_str()?.to_string(), slug: p["slug"].as_str().unwrap_or("").to_string(), title: p["title"].as_str().unwrap_or("").to_string() })
+    Some(Resolved { pid: p["id"].as_str()?.to_string(), title: p["title"].as_str().unwrap_or("").to_string() })
 }
 
 /// Map a mod id / plugin name to a Modrinth project that can run in `ctx`. Only confident matches are returned:
@@ -524,7 +523,7 @@ pub fn resolve(id: &str, ctx: &Ctx) -> Res<Option<Resolved>> {
         for h in res["hits"].as_array().into_iter().flatten() {
             if norm(h["slug"].as_str().unwrap_or("")) == want || norm(h["title"].as_str().unwrap_or("")) == want {
                 if ctx.server && h["server_side"] == "unsupported" { continue; }
-                found = Some(Resolved { pid: h["project_id"].as_str().unwrap_or("").to_string(), slug: h["slug"].as_str().unwrap_or("").to_string(), title: h["title"].as_str().unwrap_or("").to_string() });
+                found = Some(Resolved { pid: h["project_id"].as_str().unwrap_or("").to_string(), title: h["title"].as_str().unwrap_or("").to_string() });
                 break;
             }
         }
