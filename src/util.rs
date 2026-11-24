@@ -141,3 +141,16 @@ pub fn run_parallel<T: Send + Sync, F: Fn(&T) -> Res<()> + Send + Sync>(items: &
     prog(done.load(Ordering::SeqCst), total);
     match err.into_inner().unwrap() { Some(e) => Err(e), None => Ok(()) }
 }
+
+/// Installed RAM in MB (0 when it can't be read).
+pub fn system_memory_mb() -> i64 {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_memory();
+    (sys.total_memory() / (1024 * 1024)) as i64
+}
+
+/// The most memory a game may be given (Settings > Java & memory): the installed RAM in whole 256 MB steps, 65536 when unknown.
+pub fn max_game_memory_mb() -> i64 {
+    let m = system_memory_mb();
+    if m > 0 { (m / 256 * 256).max(512) } else { 65536 }
+}

@@ -9,7 +9,8 @@ use crate::util::{download_file, get_json, run_parallel, sha1_file, Res};
 use md5::{Digest, Md5};
 use regex::Regex;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -264,8 +265,11 @@ fn ensure_runtime(component: &str, meta: &Path, prog: &dyn Fn(&str, f64)) -> Res
     Ok(exe)
 }
 
+/// Major version of a Java executable (0 when it isn't one). javaw.exe prints nothing, so its java.exe sibling is asked.
 pub fn java_major(exe: &Path) -> u32 {
-    let mut c = Command::new(exe);
+    let console = exe.with_file_name("java.exe");
+    let windowed = exe.file_name().map_or(false, |n| n.eq_ignore_ascii_case("javaw.exe"));
+    let mut c = Command::new(if windowed && console.is_file() { console.as_path() } else { exe });
     c.arg("-version");
     #[cfg(windows)] { use std::os::windows::process::CommandExt; c.creation_flags(0x08000000); }
     let Ok(o) = c.output() else { return 0 };
@@ -288,9 +292,10 @@ pub fn java_need(profile: &Value) -> (String, u32) {
 
 pub fn find_java(profile: &Value, settings: &Map<String, Value>, meta: &Path, prog: &dyn Fn(&str, f64)) -> Res<PathBuf> {
     let (comp, want) = java_need(profile);
-    let custom = settings.get("java_path").and_then(|v| v.as_str()).unwrap_or("").trim();
+    let own = settings.get("java_path").and_then(|v| v.as_str()).unwrap_or("").trim();   // an instance's or a server's own Java
+    let custom = if own.is_empty() { store::java_choice(settings, want) } else { own.to_string() };
     if !custom.is_empty() {
-        if !Path::new(custom).is_file() { return Err(format!("The Java you chose in Settings doesn't exist: {custom}")); }
+        if !Path::new(&custom).is_file() { return Err(format!("The Java you chose in Settings doesn't exist: {custom}")); }
         return Ok(PathBuf::from(custom));
     }
     let mut err = None;
@@ -299,7 +304,95 @@ pub fn find_java(profile: &Value, settings: &Map<String, Value>, meta: &Path, pr
     }
     // Java 8 era (1.16.5 and older) can't run on a newer system Java, so only an exact match is acceptable there.
     if let Some(sj) = meta::find_java_on_path() { let m = java_major(&sj); if if want <= 8 { m == 8 } else { m >= want } { return Ok(sj); } }
-    Err(format!("Java {want} is needed and couldn't be downloaded{}. Install it or choose one in Settings > Launch.", err.map(|e| format!(" ({e})")).unwrap_or_default()))
+    Err(format!("Java {want} is needed and couldn't be downloaded{}. Install it or choose one in Settings > Java & memory.", err.map(|e| format!(" ({e})")).unwrap_or_default()))
+}
+
+/// Every Java Orbit can find on this computer with its major version: JAVA_HOME, the PATH, the runtimes Orbit downloaded
+/// and the usual install folders. Settings > Java & memory > Detect picks from this list.
+pub fn detect_javas() -> Vec<(PathBuf, u32)> {
+    let exe = if cfg!(windows) { "java.exe" } else { "java" };
+    let var = |k: &str| std::env::var_os(k).map(PathBuf::from);
+    let mut roots: Vec<PathBuf> = vec![store::home_dir().join(".sdkman/candidates/java"), store::home_dir().join(".jdks")];
+    if cfg!(windows) {
+        for k in ["ProgramFiles", "ProgramFiles(x86)"] {
+            for d in ["Java", "Eclipse Adoptium", "Microsoft", "Zulu", "BellSoft", "Amazon Corretto", "Semeru"] { roots.extend(var(k).map(|p| p.join(d))); }
+        }
+    } else if cfg!(target_os = "macos") {
+        roots.push(PathBuf::from("/Library/Java/JavaVirtualMachines"));
+        roots.push(store::home_dir().join("Library/Java/JavaVirtualMachines"));
+    } else {
+        roots.extend(["/usr/lib/jvm", "/usr/java", "/opt/java"].map(PathBuf::from));
+    }
+    let mut found: Vec<PathBuf> = var("JAVA_HOME").map(|h| h.join("bin").join(exe)).into_iter().collect();
+    found.extend(meta::find_java_on_path());
+    if let Ok(rd) = std::fs::read_dir(store::meta_dir().join("runtime")) {
+        found.extend(rd.flatten().map(|e| e.path()).filter(|d| d.join(".quarry-ok").exists()).map(|d| runtime_exe(&d)));
+    }
+    for r in roots {
+        if let Ok(rd) = std::fs::read_dir(&r) {
+            for d in rd.flatten().map(|e| e.path()) { found.push(d.join("bin").join(exe)); found.push(d.join("Contents/Home/bin").join(exe)); }
+        }
+    }
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut out: Vec<(PathBuf, u32)> = vec![];
+    for p in found {
+        if !p.is_file() || !seen.insert(p.canonicalize().unwrap_or_else(|_| p.clone())) { continue; }
+        let major = java_major(&p);
+        if major > 0 { out.push((p, major)); }
+    }
+    out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    out
+}
+
+/// Settings > Java & memory > Environment variables: `NAME=value NAME2="two words"`, split like a command line.
+pub fn parse_env(text: &str) -> Res<Vec<(String, String)>> {
+    let name = Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*$").unwrap();
+    shlex_split(text).into_iter().map(|t| match t.split_once('=') {
+        Some((k, v)) if name.is_match(k) => Ok((k.to_string(), v.to_string())),
+        _ => Err(format!("\"{t}\" isn't NAME=value.")),
+    }).collect()
+}
+
+/// Settings > Window: how the game window opens.
+fn window_args(st: &Map<String, Value>) -> Vec<String> {
+    if st.get("fullscreen").and_then(|v| v.as_bool()).unwrap_or(false) { return vec!["--fullscreen".into()]; }
+    vec!["--width".into(), store::window_width(st).to_string(), "--height".into(), store::window_height(st).to_string()]
+}
+
+// ---------- launch hooks ----------
+// Settings > Launch hooks: a command before the game starts (it must succeed), a wrapper in front of the Java command and
+// a command after the game closes. $INST_NAME, $INST_ID, $INST_DIR, $INST_MC_DIR, $INST_JAVA and $INST_JAVA_ARGS are
+// replaced in all three and also set as environment variables for the pre-launch and post-exit commands.
+
+fn hook(st: &Map<String, Value>, key: &str) -> Option<String> {
+    st.get(key).and_then(|v| v.as_str()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+fn hook_vars(inst: &Instance, root: &Path, java: &Path, java_args: &str) -> Vec<(&'static str, String)> {
+    let path = |p: &Path| p.to_string_lossy().into_owned();
+    vec![("NAME", inst.state["name"].as_str().map(String::from).unwrap_or_else(|| inst.id())), ("ID", inst.id()), ("DIR", path(root)),
+         ("MC_DIR", path(root)), ("JAVA", path(java)), ("JAVA_ARGS", java_args.to_string())]
+}
+
+fn hook_expand(text: &str, vars: &[(&'static str, String)]) -> String {
+    Regex::new(r"\$INST_(NAME|ID|DIR|MC_DIR|JAVA_ARGS|JAVA)\b").unwrap()
+        .replace_all(text, |c: &regex::Captures| vars.iter().find(|(k, _)| *k == &c[1]).map(|(_, v)| v.clone()).unwrap_or_default()).into_owned()
+}
+
+/// Adds a line to a launch log.
+fn note(log: &Path, text: &str) {
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log) { let _ = writeln!(f, "[orbit] {text}"); }
+}
+
+/// Runs a hook through the system shell (so quotes, pipes and && work), waits for it and sends its output to the launch log.
+fn run_hook(line: &str, vars: &[(&'static str, String)], cwd: &Path, log: &Path) -> Res<()> {
+    let line = hook_expand(line, vars);
+    #[cfg(windows)] let mut c = { use std::os::windows::process::CommandExt; let mut c = Command::new("cmd"); c.arg("/C").raw_arg(format!("\"{line}\"")).creation_flags(0x08000000); c };
+    #[cfg(not(windows))] let mut c = { let mut c = Command::new("sh"); c.arg("-c").arg(&line); c };
+    let out = || std::fs::OpenOptions::new().create(true).append(true).open(log).map(Stdio::from).map_err(|e| e.to_string());
+    for (k, v) in vars { c.env(format!("INST_{k}"), v); }
+    let st = c.current_dir(cwd).stdin(Stdio::null()).stdout(out()?).stderr(out()?).status().map_err(|e| format!("it couldn't be started ({e})"))?;
+    if st.success() { Ok(()) } else { Err(format!("it exited with code {}", st.code().map_or_else(|| "?".to_string(), |c| c.to_string()))) }
 }
 
 // ---------- command ----------
@@ -342,7 +435,7 @@ pub fn shlex_split(s: &str) -> Vec<String> {
     out
 }
 
-fn build_command(profile: &Value, plan: &Plan, java: &Path, inst_root: &Path, who: &Identity, memory_mb: i64, extra_jvm: &str, quick: Option<(&str, &str)>) -> Vec<String> {
+fn build_command(profile: &Value, plan: &Plan, java: &Path, inst_root: &Path, who: &Identity, memory_mb: i64, extra_jvm: &str, window: &[String], quick: Option<(&str, &str)>) -> Vec<String> {
     let none = Map::new();
     let (jvm, game) = if profile.get("arguments").is_some() {
         (expand(&profile["arguments"]["jvm"], &none), expand(&profile["arguments"]["game"], &none))
@@ -368,6 +461,7 @@ fn build_command(profile: &Value, plan: &Plan, java: &Path, inst_root: &Path, wh
     cmd.extend(jvm.iter().map(|a| sub(a)));
     cmd.push(profile["mainClass"].as_str().unwrap_or("").into());
     cmd.extend(game.iter().map(|a| sub(a)));
+    cmd.extend(window.iter().cloned());
     if let Some((kind, val)) = quick {
         if profile["arguments"].to_string().contains("quickPlay") {
             match kind { "singleplayer" => cmd.extend(["--quickPlaySingleplayer".into(), val.into()]), "multiplayer" => cmd.extend(["--quickPlayMultiplayer".into(), val.into()]), _ => {} }
@@ -485,7 +579,6 @@ fn auto_deps(iid: &str, root: &Path, prog: &dyn Fn(&str, f64)) {
     update(iid, |s| s["deps"] = o.to_json());
     let _ = std::fs::create_dir_all(root.join("logs"));
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(root.join("logs").join("orbit-deps.log")) {
-        use std::io::Write;
         for l in lines { let _ = writeln!(f, "[{}] {l}", store::now() as u64); }
     }
 }
@@ -503,25 +596,41 @@ fn run(iid: &str, real_iid: &str, inst_root: &Path, settings: &Map<String, Value
         let plan = install(&profile, meta, inst_root, &prog)?;
         prog("Finding Java", 0.95);
         let mut js = settings.clone();
-        js.insert("java_path".into(), json!(icfg.get("java_path").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).or(settings.get("java_path").and_then(|v| v.as_str())).unwrap_or("")));
+        js.insert("java_path".into(), json!(icfg.get("java_path").and_then(|v| v.as_str()).unwrap_or("")));
         let java = find_java(&profile, &js, meta, &prog)?;
         (profile, plan, java)
     };
     let mem = icfg.get("memory").and_then(|v| v.as_i64()).filter(|m| *m > 0).or(settings.get("memory").and_then(|v| v.as_i64()).filter(|m| *m > 0)).unwrap_or(4096);
     let extra = [settings.get("jvm_args"), icfg.get("jvm_args")].iter().filter_map(|x| x.and_then(|v| v.as_str())).filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ");
-    let mut cmd = build_command(&profile, &plan, &java, inst_root, &who, mem, &extra, quick.as_ref().map(|(a, b)| (a.as_str(), b.as_str())));
+    let mut cmd = build_command(&profile, &plan, &java, inst_root, &who, mem, &extra, &window_args(settings), quick.as_ref().map(|(a, b)| (a.as_str(), b.as_str())));
+    let env = parse_env(settings.get("env_vars").and_then(|v| v.as_str()).unwrap_or(""))?;
     let logs = inst_root.join("logs");
     std::fs::create_dir_all(&logs).map_err(|e| e.to_string())?;
     let suffix = iid.strip_prefix(real_iid).and_then(|r| r.strip_prefix('@')).map(|n| format!("-{n}")).unwrap_or_default();
     let log_path = logs.join(format!("quarry-launch{suffix}.log"));
-    let logf = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
+    std::fs::write(&log_path, "").map_err(|e| e.to_string())?;                       // every writer appends, so the hooks' output and the game's stay in order
+    let logf = std::fs::OpenOptions::new().append(true).open(&log_path).map_err(|e| e.to_string())?;
+    let java_args = format!("-Xmx{mem}M -Xms256M {extra}");
+    let vars = hook_vars(&inst, inst_root, &java, java_args.trim());
+    for problem in crate::syncing::pull(inst_root, settings) { note(&log_path, &problem); }
+    if let Some(h) = hook(settings, "hook_pre") {
+        prog("Running the pre-launch command", 0.97);
+        note(&log_path, &format!("pre-launch: {}", hook_expand(&h, &vars)));
+        run_hook(&h, &vars, inst_root, &log_path).map_err(|e| format!("The pre-launch command failed: {e}. Its output is in the launch log."))?;
+    }
     if cmd.iter().map(|c| c.len() + 1).sum::<usize>() > 30000 {                   // Windows command-line limit
         let argfile = inst_root.join(format!("quarry-args{suffix}.txt"));
         let body = cmd[1..].iter().map(|a| format!("\"{}\"", a.replace('\\', "\\\\").replace('"', "\\\""))).collect::<Vec<_>>().join("\n");
         std::fs::write(&argfile, body).map_err(|e| e.to_string())?;
         cmd = vec![cmd[0].clone(), format!("@{}", argfile.display())];
     }
+    if let Some(w) = hook(settings, "hook_wrapper") {
+        let mut full: Vec<String> = shlex_split(&w).iter().map(|t| hook_expand(t, &vars)).collect();
+        full.extend(cmd);
+        cmd = full;
+    }
     let mut c = Command::new(&cmd[0]);
+    c.envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
     c.args(&cmd[1..]).current_dir(inst_root).stdout(Stdio::from(logf.try_clone().map_err(|e| e.to_string())?)).stderr(Stdio::from(logf)).stdin(Stdio::null());
     #[cfg(windows)] { use std::os::windows::process::CommandExt; c.creation_flags(0x08000000 | 0x00000200); }
     #[cfg(unix)] { use std::os::unix::process::CommandExt; c.process_group(0); }
@@ -554,6 +663,11 @@ fn run(iid: &str, real_iid: &str, inst_root: &Path, settings: &Map<String, Value
         let tail: Vec<&str> = t.trim().lines().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
         update(iid, |s| { s["status"] = json!("error"); s["error"] = json!(format!("Minecraft closed with code {}. {}", rc.map(|c| c.to_string()).unwrap_or_else(|| format!("signal {signalled:?}")), tail.join(" | "))); });
     } else { update(iid, |s| { s["status"] = json!("idle"); s["message"] = json!(""); }); }
+    for problem in crate::syncing::push(inst_root, settings) { note(&log_path, &problem); }
+    if let Some(h) = hook(settings, "hook_post") {
+        note(&log_path, &format!("post-exit: {}", hook_expand(&h, &vars)));
+        if let Err(e) = run_hook(&h, &vars, inst_root, &log_path) { note(&log_path, &format!("The post-exit command failed: {e}")); }
+    }
     Ok(())
 }
 
@@ -573,9 +687,25 @@ mod tests {
             "minecraftArguments": "--username ${auth_player_name} --gameDir ${game_directory} --assetsDir ${assets_root} --accessToken ${auth_access_token}"});
         let plan = Plan { classpath: vec![PathBuf::from("a.jar")], natives: PathBuf::from("/n"), game_assets: PathBuf::from("/a"), log_arg: None, assets_root: PathBuf::from("/m/assets") };
         let who = Identity { name: "Steve".into(), uuid: "u".into(), token: "0".into(), xuid: "0".into(), user_type: "legacy".into() };
-        let c = build_command(&profile, &plan, Path::new("java"), Path::new("/i"), &who, 2048, "", None);
+        let c = build_command(&profile, &plan, Path::new("java"), Path::new("/i"), &who, 2048, "", &window_args(&Map::new()), None);
         assert!(c.contains(&"-Djava.library.path=/n".to_string()) && c.contains(&"-cp".to_string()));
         let at = c.iter().position(|x| x == "net.minecraft.client.main.Main").unwrap();
         assert_eq!(&c[at + 1..at + 3], ["--username", "Steve"]);
+        assert_eq!(&c[c.len() - 4..], ["--width", "854", "--height", "480"]);
+        let full = json!({"fullscreen": true}).as_object().cloned().unwrap();
+        assert_eq!(window_args(&full), ["--fullscreen"]);
+    }
+
+    #[test]
+    fn environment_variables_and_hook_variables() {
+        assert_eq!(parse_env(r#"A=1 B="two words""#).unwrap(), vec![("A".to_string(), "1".to_string()), ("B".to_string(), "two words".to_string())]);
+        assert!(parse_env("nonsense").is_err());
+        let vars = vec![("JAVA", "j".to_string()), ("JAVA_ARGS", "-Xmx1M".to_string()), ("ID", "x".to_string())];
+        assert_eq!(hook_expand("$INST_JAVA $INST_JAVA_ARGS $INST_ID $INST_IDX", &vars), "j -Xmx1M x $INST_IDX");
+    }
+
+    #[test]
+    fn java_versions_land_in_their_slot() {
+        assert_eq!([8, 11, 16, 17, 18, 21, 22, 25].map(store::java_slot), [8, 17, 17, 17, 21, 21, 25, 25]);
     }
 }

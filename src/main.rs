@@ -1,4 +1,5 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+#![recursion_limit = "256"] //!Temp fix for now
 //! Orbit (Rust). A native window (WebView2 on Windows, WebKitGTK on Linux) showing the same
 //! UI as before, backed by a small loopback-only HTTP/JSON server with a per-run secret token.
 
@@ -16,6 +17,7 @@ mod mods;
 mod optimization;
 mod servers;
 mod store;
+mod syncing;
 mod util;
 
 use std::collections::HashMap;
@@ -193,6 +195,8 @@ fn run() -> Result<(), String> {
         }
     }
 
+    store::migrate_java();
+
     // A missing / unplugged instances folder must not stop Orbit from opening (Settings can fix it).
     let _ = std::fs::create_dir_all(store::inst_dir());
     let token = std::env::var("ORBIT_TOKEN").unwrap_or_else(|_| hex::encode(rand::random::<[u8; 16]>()));
@@ -278,8 +282,8 @@ fn run_window(url: String) -> Result<(), String> {
 
     let wb = WindowBuilder::new()
         .with_title("Orbit")
-        .with_inner_size(LogicalSize::new(1280.0, 840.0))
-        .with_min_inner_size(LogicalSize::new(980.0, 640.0));
+        .with_inner_size(LogicalSize::new(1440.0, 920.0))
+        .with_min_inner_size(LogicalSize::new(1120.0, 720.0));
     #[cfg(windows)]
     let wb = wb.with_decorations(false);
     let window = wb.build(&event_loop).map_err(|e| format!("Orbit couldn't create its window: {e}"))?;

@@ -82,6 +82,38 @@ pub fn snow_height() -> u64 { settings().get("snow_height").and_then(|v| v.as_u6
 /// ...and how fast it falls, in percent of the normal speed (10 to 300, default 100).
 pub fn snow_speed() -> u64 { settings().get("snow_speed").and_then(|v| v.as_u64()).unwrap_or(100).clamp(10, 1000) }
 
+/// Settings > Java & memory keeps one Java per major version a Minecraft release can ask for.
+pub const JAVA_SLOTS: [u32; 4] = [25, 21, 17, 8];
+
+/// The slot a required Java version belongs to (Minecraft 1.17 asks for Java 16, which runs on the Java 17 slot).
+pub fn java_slot(major: u32) -> u32 {
+    match major { 0..=8 => 8, 9..=17 => 17, 18..=21 => 21, _ => 25 }
+}
+
+/// The Java chosen in Settings for the Java version `major`, or "" to let Orbit pick one.
+pub fn java_choice(st: &Map<String, Value>, major: u32) -> String {
+    st.get("java_paths").and_then(|v| v.get(java_slot(major).to_string())).and_then(|v| v.as_str()).unwrap_or("").trim().to_string()
+}
+
+/// Older Orbit versions kept one Java for every game in `java_path`; it now lives in the slot of its own version.
+pub fn migrate_java() {
+    let mut st = settings();
+    let Some(old) = st.remove("java_path") else { return };
+    let old = old.as_str().unwrap_or("").trim().to_string();
+    let major = if old.is_empty() { 0 } else { crate::launcher::java_major(Path::new(&old)) };
+    if major > 0 {
+        let mut slots = st.get("java_paths").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        slots.entry(java_slot(major).to_string()).or_insert(json!(old));
+        st.insert("java_paths".into(), Value::Object(slots));
+    }
+    let _ = save_settings(&st);
+}
+
+/// Settings > Window: the size the game window opens with (854 x 480 until changed)...
+pub const DEFAULT_WINDOW: (i64, i64) = (854, 480);
+pub fn window_width(st: &Map<String, Value>) -> i64 { st.get("width").and_then(|v| v.as_i64()).filter(|n| (320..=16384).contains(n)).unwrap_or(DEFAULT_WINDOW.0) }
+pub fn window_height(st: &Map<String, Value>) -> i64 { st.get("height").and_then(|v| v.as_i64()).filter(|n| (320..=16384).contains(n)).unwrap_or(DEFAULT_WINDOW.1) }
+
 fn setting_path(key: &str, default: PathBuf) -> PathBuf {
     settings().get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(PathBuf::from).unwrap_or(default)
 }
@@ -152,6 +184,7 @@ pub fn summary(inst: &Instance) -> Value {
     let st = &inst.state;
     json!({
         "id": inst.id(),
+        "path": inst.root.to_string_lossy(),
         "name": st.get("name").cloned().unwrap_or_else(|| json!(inst.id())),
         "mc": st["config"]["mc"], "loader": st["config"]["loader"],
         "loader_version": st["config"].get("loader_version").cloned().unwrap_or(json!("")),

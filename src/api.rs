@@ -2,7 +2,7 @@
 //! ui/index.html works as it is. Errors are plain strings -> HTTP 400 (NOT_PORTED: prefix -> 501).
 use crate::mods::{self, Log};
 use crate::util::{SharedTrack, Track};
-use crate::{auth, dialogs, gamedata, icons, importers, launcher, meta, optimization, servers, store};
+use crate::{auth, dialogs, gamedata, icons, importers, launcher, meta, optimization, servers, store, syncing};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -183,14 +183,37 @@ fn settings(r: &Req) -> Res {
         st.insert("accounts".into(), json!(accts));
         st.insert("avatars".into(), Value::Object(av));
         if b.get("memory").is_some() {
-            let mem = ms(&b["memory"]).unwrap_or(0);
-            if mem != 0 && !(512..=65536).contains(&mem) { return Err("Memory should be between 512 and 65536 MB.".into()); }
+            let (mem, max) = (ms(&b["memory"]).unwrap_or(0), crate::util::max_game_memory_mb());
+            if mem != 0 && !(512..=max).contains(&mem) { return Err(format!("Memory should be between 512 and {max} MB (the memory in this computer).")); }
             st.insert("memory".into(), json!(mem));
         }
-        if let Some(jp) = b["java_path"].as_str() {
-            let jp = jp.trim();
-            if !jp.is_empty() && !Path::new(jp).is_file() { return Err("That Java file doesn't exist.".into()); }
-            st.insert("java_path".into(), json!(jp));
+        if let Some(o) = b["java_paths"].as_object() {
+            let mut slots = st.get("java_paths").and_then(|v| v.as_object().cloned()).unwrap_or_default();
+            for major in store::JAVA_SLOTS {
+                let Some(p) = o.get(&major.to_string()).and_then(|v| v.as_str()).map(str::trim) else { continue };
+                if p.is_empty() { slots.remove(&major.to_string()); continue; }
+                if !Path::new(p).is_file() { return Err(format!("That Java {major} file doesn't exist.")); }
+                slots.insert(major.to_string(), json!(p));
+            }
+            st.insert("java_paths".into(), Value::Object(slots));
+        }
+        if let Some(e) = b["env_vars"].as_str() {
+            let e: String = e.trim().chars().take(1000).collect();
+            launcher::parse_env(&e)?;
+            st.insert("env_vars".into(), json!(e));
+        }
+        if let Some(f) = b["fullscreen"].as_bool() { st.insert("fullscreen".into(), json!(f)); }
+        for (k, label) in [("width", "Width"), ("height", "Height")] {
+            if b.get(k).is_some() {
+                let n = ms(&b[k]).filter(|n| (320..=16384).contains(n)).ok_or_else(|| format!("{label} should be a number between 320 and 16384."))?;
+                st.insert(k.into(), json!(n));
+            }
+        }
+        for k in ["hook_pre", "hook_wrapper", "hook_post"] {
+            if let Some(h) = b[k].as_str() { st.insert(k.into(), json!(h.trim().chars().take(1000).collect::<String>())); }
+        }
+        for (k, _) in syncing::ITEMS {
+            if let Some(on) = b[k].as_bool() { st.insert(k.into(), json!(on)); }
         }
         if let Some(a) = b["auto_deps"].as_bool() { st.insert("auto_deps".into(), json!(a)); }
         if let Some(a) = b["jvm_args"].as_str() { st.insert("jvm_args".into(), json!(a.trim().chars().take(500).collect::<String>())); }
@@ -212,6 +235,7 @@ fn settings(r: &Req) -> Res {
     }
     let st = store::settings();
     let g = |k: &str| st.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let on = |k: &str| st.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
     let ms_accts = auth::accounts();
     let active = g("ms_active");
     let player = ms_accts.iter().find(|a| a["id"] == active.as_str()).and_then(|a| a["name"].as_str().map(String::from)).unwrap_or_else(|| g("username"));
@@ -220,7 +244,11 @@ fn settings(r: &Req) -> Res {
         "folder": store::inst_dir().to_string_lossy(), "default_folder": store::default_instances().to_string_lossy(),
         "username": g("username"), "accounts": accounts(&st), "avatars": st.get("avatars").cloned().unwrap_or(json!({})),
         "memory": st.get("memory").cloned().unwrap_or(json!(4096)),
-        "java_path": g("java_path"), "jvm_args": g("jvm_args"), "auto_deps": servers::auto_deps(),
+        "java_paths": st.get("java_paths").cloned().unwrap_or(json!({})), "jvm_args": g("jvm_args"), "env_vars": g("env_vars"), "max_memory": crate::util::max_game_memory_mb(),
+        "fullscreen": on("fullscreen"), "width": store::window_width(&st), "height": store::window_height(&st),
+        "hook_pre": g("hook_pre"), "hook_wrapper": g("hook_wrapper"), "hook_post": g("hook_post"),
+        "sync_options": on("sync_options"), "sync_servers": on("sync_servers"), "sync_packs": on("sync_packs"),
+        "auto_deps": servers::auto_deps(),
         "tl_dir": store::tl_root().to_string_lossy(), "tl_default": store::default_mc_dir().to_string_lossy(),
         "tl_is_default": g("tlauncher_dir").is_empty(), "is_default": g("instances_dir").is_empty(),
         "theme": st.get("theme").cloned().unwrap_or(json!("oled")), "moved": moved,
@@ -236,6 +264,16 @@ fn settings(r: &Req) -> Res {
         "count": store::instance_folders(&store::inst_dir()).len(),
         "ms_accounts": ms_accts, "ms_active": active, "ms_client_id": auth::client_id(), "player": player,
     }))
+}
+
+/// Settings > Java & memory > the "Valid" badge: is `path` a Java of the version `slot` stands for?
+fn java_check(path: &str, slot: &str) -> Res {
+    let (path, slot) = (Path::new(path.trim()), slot.parse::<u32>().unwrap_or(0));
+    if !path.is_file() { return Ok(json!({"valid": false, "reason": "File not found"})); }
+    let major = launcher::java_major(path);
+    if major == 0 { return Ok(json!({"valid": false, "reason": "Not a Java runtime"})); }
+    if major != slot { return Ok(json!({"valid": false, "reason": format!("This is Java {major}, not Java {slot}")})); }
+    Ok(json!({"valid": true, "major": major}))
 }
 
 // ---------- groups ----------
@@ -316,14 +354,17 @@ fn list_instances() -> Vec<Value> {
     out
 }
 
+fn new_iid(name: &str) -> String {
+    let slug = re(r"[^a-z0-9]+").replace_all(&name.to_lowercase(), "-").trim_matches('-').to_string();
+    format!("{}-{:04x}", if slug.is_empty() { "instance".into() } else { slug }, rand::random::<u16>())
+}
+
 pub fn create_instance_raw(name: &str, mc: &str, loader: &str, lv: &str) -> Result<store::Instance, String> {
     let name: String = name.trim().chars().take(48).collect();
     if name.is_empty() || mc.is_empty() || !(mods::is_loader(loader) || loader == "vanilla") { return Err("Name, game version and loader are required.".into()); }
     let lv = if loader == "vanilla" { "" } else { lv.trim() };
     if !lv.is_empty() && !re(r"^[A-Za-z0-9._+\-]{1,64}$").is_match(lv) { return Err("That loader version isn't valid.".into()); }
-    let slug = re(r"[^a-z0-9]+").replace_all(&name.to_lowercase(), "-").trim_matches('-').to_string();
-    let iid = format!("{}-{:04x}", if slug.is_empty() { "instance".into() } else { slug }, rand::random::<u16>());
-    let mut inst = store::Instance::open(&store::inst_dir().join(&iid));
+    let mut inst = store::Instance::open(&store::inst_dir().join(new_iid(&name)));
     let mut cfg = json!({"mc": mc, "loader": loader});
     if !lv.is_empty() { cfg["loader_version"] = json!(lv); }
     inst.state["name"] = json!(name);
@@ -332,6 +373,20 @@ pub fn create_instance_raw(name: &str, mc: &str, loader: &str, lv: &str) -> Resu
     std::fs::create_dir_all(inst.root.join("mods")).map_err(|e| e.to_string())?;
     inst.save()?;
     Ok(inst)
+}
+
+/// A full copy of the instance (mods, worlds, settings) under a new id, with its own name, creation date and playtime.
+fn duplicate_instance(src: &store::Instance, iid: &str) -> Res {
+    if launcher::instance_busy(iid) { return Err("Close the game before duplicating this instance.".into()); }
+    let name: String = format!("{} copy", src.state["name"].as_str().unwrap_or(iid)).chars().take(48).collect();
+    let root = store::inst_dir().join(new_iid(&name));
+    if let Err(e) = copy_dir(&src.root, &root) { let _ = std::fs::remove_dir_all(&root); return Err(e); }
+    let mut dup = store::Instance::open(&root);
+    dup.state["name"] = json!(name);
+    dup.state["created"] = json!(store::now());
+    dup.state.as_object_mut().map(|o| { o.remove("last_played"); o.remove("played_seconds"); });
+    dup.save()?;
+    Ok(store::summary(&dup))
 }
 
 fn create_instance(name: &str, mc: &str, loader: &str, lv: &str) -> Res { Ok(store::summary(&create_instance_raw(name, mc, loader, lv)?)) }
@@ -466,7 +521,6 @@ fn instance_detail(iid: &str) -> Res {
     sync_inst(&mut inst);
     let inst = store::load_inst(iid)?;
     let mut d = store::summary(&inst);
-    d["path"] = json!(inst_path(iid)?.to_string_lossy());
     d["launch"] = launcher::status(iid);
     d["content"] = json!(inst.mods().iter().map(|(k, m)| { let mut m = m.clone(); m["key"] = json!(k); m["type"] = json!(m["type"].as_str().unwrap_or("mod")); m["url"] = json!(page_url(k, &m));
         // no Modrinth / CurseForge icon (hand-added, imported, not matched): the page asks for the one inside the file
@@ -917,6 +971,7 @@ fn instance_action(r: &Req, iid: &str, act: &str) -> Result<Out, String> {
             match icons::icon_for(&p) { Some((b, ct)) => Ok(Out::Bytes(b, ct)), None => Err("No icon.".into()) }
         }
         (_, "tlauncher") => { let (iid2, root) = (iid.to_string(), store::tl_root()); json_out(importers::export_to_tlauncher(&inst, &iid2, &root)) }
+        ("POST", "duplicate") => json_out(duplicate_instance(&inst, iid)),
         (_, "open") => { let _ = std::fs::create_dir_all(inst.root.join("mods")); open_folder(&inst.root); Ok(Out::Json(json!({"ok": true}))) }
         _ => Err("unknown action".into()),
     }
@@ -1015,6 +1070,9 @@ pub fn route(r: &Req) -> Result<Out, String> {
             return j(Ok(json!({"groups": all_groups()})));
         }
         "/api/playtime" => return j(Ok(store::playtime_report())),
+        "/api/java/detect" => return j(Ok(json!({"javas": launcher::detect_javas().into_iter().map(|(p, m)| json!({"path": p.to_string_lossy(), "major": m})).collect::<Vec<_>>()}))),
+        "/api/java/check" => return j(java_check(qs("path"), qs("slot"))),
+        "/api/sync/open" if m == "POST" => { syncing::open(s(b, "item"))?; return j(Ok(json!({"ok": true}))); }
         "/api/launch-status" => return j(Ok(json!({"running": launcher::running()}))),
         "/api/project" => { use_key(); return j(mods::project_page(qs("id"))); }
         "/api/project/versions" => return j(mods::project_versions(qs("id")).map(|v| json!({"versions": v}))),

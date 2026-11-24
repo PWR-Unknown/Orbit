@@ -225,9 +225,7 @@ impl An<'_> {
 
     fn ram_hint(&self) -> String {
         let cur = self.inp.ram_mb.unwrap_or(4096);
-        let mut sys = sysinfo::System::new();
-        sys.refresh_memory();
-        let phys = (sys.total_memory() / (1024 * 1024)) as i64;
+        let phys = crate::util::system_memory_mb();
         let mut want = ((cur * 3 / 2) + 1023) / 1024 * 1024;
         want = want.max(4096);
         if phys > 0 { want = want.min((phys * 3 / 4) / 512 * 512).max(cur); }
@@ -809,7 +807,7 @@ fn playbook(id: &str, server: bool) -> &'static [&'static str] {
         "java-version" => if server {
             &["Open the server's Settings tab and clear the Java path.", "Start the server; Orbit downloads the Java it needs.", "Still failing? Run `java -version` in a terminal and compare it to the version named above."]
         } else {
-            &["Open Settings > Launch and clear the Java path.", "Launch again; Orbit fetches the Java this version needs.", "Still failing? Check the instance's own Settings for a Java path override."]
+            &["Open Settings > Java & memory and clear the Java path.", "Launch again; Orbit fetches the Java this version needs.", "Still failing? Check the instance's own Settings for a Java path override."]
         },
         "loader-version" => &["Check which loader version the mod asks for (its Modrinth page, Versions tab).", "Raise the loader to that version or newer.", "Update your mods afterwards so they match the new loader."],
         "mod-conflict" => &["Switch off one of the two mods (Content tab toggle) and start again.", "Still failing? Swap them: switch the other one off instead.", "Pick the one you need more and look for an alternative to the other."],
