@@ -80,6 +80,10 @@ pub fn close_timer() -> u64 { settings().get("close_timer").and_then(|v| v.as_u6
 /// Settings > Appearance > Christmas snow: the tallest the snow pile on the floor may grow, in px (4 to 100, default 34)...
 pub fn snow_height() -> u64 { settings().get("snow_height").and_then(|v| v.as_u64()).unwrap_or(34).clamp(4, 100) }
 /// ...and how fast it falls, in percent of the normal speed (10 to 300, default 100).
+/// Snowfall amount, 1 to 100 (default 10); falls back to the old snow_speed percentage / 10.
+pub fn snow_fall() -> u64 { settings().get("snow_fall").and_then(|v| v.as_u64()).unwrap_or_else(|| (snow_speed() / 10).max(1)).clamp(1, 100) }
+/// Mouse radius for clearing snow / pushing dust, in percent of the default (10 to 100, default 50).
+pub fn mouse_radius() -> u64 { settings().get("mouse_radius").and_then(|v| v.as_u64()).unwrap_or(50).clamp(10, 100) }
 pub fn snow_speed() -> u64 { settings().get("snow_speed").and_then(|v| v.as_u64()).unwrap_or(100).clamp(10, 1000) }
 
 /// Settings > Java & memory keeps one Java per major version a Minecraft release can ask for.

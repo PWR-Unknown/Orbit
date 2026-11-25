@@ -224,7 +224,7 @@ pub fn install_cf(inst: &mut Instance, mod_id: i64, explicit: bool, seen: &mut H
 
 pub struct PackInfo {
     pub title: String, pub mc: String, pub loader: String, pub loader_version: String, pub version: String,
-    pub project_id: Value, pub icon_url: Value, pub pack: PathBuf, pub index: Value,
+    pub project_id: Value, pub icon_url: Value, pub pack: PathBuf, pub index: Value, pub version_id: String,
 }
 
 pub fn load_mrpack(path: &Path) -> Res<PackInfo> {
@@ -253,7 +253,7 @@ pub fn load_mrpack(path: &Path) -> Res<PackInfo> {
     Ok(PackInfo {
         title: idx["name"].as_str().filter(|s| !s.is_empty()).map(String::from).unwrap_or(stem), mc, loader, loader_version: lv,
         version: idx["versionId"].as_str().unwrap_or("").to_string(), project_id: Value::Null, icon_url: Value::Null,
-        pack: path.to_path_buf(), index: idx,
+        pack: path.to_path_buf(), index: idx, version_id: String::new(),
     })
 }
 
@@ -267,12 +267,119 @@ pub fn fetch_modpack(ident: &str, tmp: &Path, mc: Option<&str>) -> Res<PackInfo>
         return Err(match mc { Some(m) => format!("{title} has no version for Minecraft {m}."), None => format!("{title} has no versions.") });
     };
     let v = vs.iter().find(|x| x["version_type"] == "release").unwrap_or(&vs[0]);
+    download_pack(&meta, v, tmp)
+}
+
+/// Download one modpack version (a Modrinth version object) and read it.
+fn download_pack(meta: &Value, v: &Value, tmp: &Path) -> Res<PackInfo> {
+    let title = st(meta, "title");
     let f = v["files"].as_array().into_iter().flatten().find(|x| x["filename"].as_str().map(|n| n.ends_with(".mrpack")).unwrap_or(false))
         .ok_or_else(|| format!("{title} {} has no .mrpack file.", st(v, "version_number")))?;
     let name = download_file(f["url"].as_str().unwrap_or(""), tmp, f["filename"].as_str().unwrap_or(""), Some("sha512"), f["hashes"]["sha512"].as_str())?;
     let mut info = load_mrpack(&tmp.join(name))?;
-    info.title = title; info.version = st(v, "version_number"); info.project_id = meta["id"].clone(); info.icon_url = meta["icon_url"].clone();
+    info.title = title; info.version = st(v, "version_number"); info.version_id = st(v, "id");
+    info.project_id = meta["id"].clone(); info.icon_url = meta["icon_url"].clone();
     Ok(info)
+}
+
+/// Every version of a modpack project, newest first, for the "change version" picker.
+pub fn pack_versions(project_id: &str) -> Res<Vec<Value>> {
+    let v = api_get(&format!("/project/{project_id}/version"), &[])?;
+    let Some(a) = v.as_array() else { return Err("That modpack wasn't found on Modrinth.".into()) };
+    let mut out: Vec<Value> = a.iter().filter(|x| x["files"].as_array().map(|f| f.iter().any(|y| y["filename"].as_str().map(|n| n.ends_with(".mrpack")).unwrap_or(false))).unwrap_or(false))
+        .map(|x| {
+            let cl: String = x["changelog"].as_str().unwrap_or("").chars().take(1200).collect();
+            json!({"id": x["id"], "version_number": x["version_number"], "name": x["name"], "type": x["version_type"], "date": x["date_published"],
+                "mc": x["game_versions"], "loaders": x["loaders"], "downloads": x["downloads"], "changelog": cl})
+        }).collect();
+    out.sort_by(|a, b| b["date"].as_str().cmp(&a["date"].as_str()));
+    Ok(out)
+}
+
+/// Download a specific version of the modpack this instance came from.
+pub fn fetch_pack_version(project_id: &str, version_id: &str, tmp: &Path) -> Res<PackInfo> {
+    let meta = api_get(&format!("/project/{project_id}"), &[])?;
+    if meta.is_null() { return Err("That modpack wasn't found on Modrinth.".into()); }
+    let v = api_get(&format!("/version/{version_id}"), &[])?;
+    if v.is_null() || v["project_id"] != meta["id"] { return Err("That version doesn't belong to this modpack.".into()); }
+    download_pack(&meta, &v, tmp)
+}
+
+/// Paths (relative to the instance) a pack puts on disk: its listed files plus everything in its overrides.
+pub fn pack_file_list(info: &PackInfo) -> Vec<String> {
+    let mut out: Vec<String> = info.index["files"].as_array().into_iter().flatten()
+        .filter(|f| f["env"]["client"] != "unsupported").filter_map(|f| f["path"].as_str().map(String::from)).collect();
+    if let Ok(f) = std::fs::File::open(&info.pack) {
+        if let Ok(mut z) = zip::ZipArchive::new(f) {
+            for i in 0..z.len() {
+                let Ok(e) = z.by_index(i) else { continue };
+                let name = e.name().to_string();
+                let (head, rel) = name.split_once('/').unwrap_or((&name, ""));
+                if (head == "overrides" || head == "client-overrides") && !rel.is_empty() && !e.is_dir() { out.push(rel.to_string()); }
+            }
+        }
+    }
+    out.sort(); out.dedup();
+    out
+}
+
+fn file_matches(p: &Path, fe: &Value) -> bool {
+    if !p.is_file() { return false; }
+    let (algo, exp) = if let Some(h) = fe["hashes"]["sha512"].as_str() { ("sha512", h) } else if let Some(h) = fe["hashes"]["sha1"].as_str() { ("sha1", h) } else { return false };
+    crate::util::hash_file(p, algo).map(|h| h.eq_ignore_ascii_case(exp)).unwrap_or(false)
+}
+
+/// Move an installed modpack instance to another version of the same pack (update or downgrade) in place:
+/// files the new version no longer ships are removed, changed ones replaced, unchanged ones kept, and the
+/// Minecraft version / loader follow the pack. Worlds, screenshots and mods the player added themselves stay.
+pub fn switch_modpack(inst: &mut Instance, info: &PackInfo, log: &mut Log) -> Res<()> {
+    let new_files: HashSet<String> = pack_file_list(info).into_iter().collect();
+    let mut old_files: Vec<String> = inst.state["modpack"]["files"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
+    if old_files.is_empty() {
+        // installed before Orbit recorded the file list: rebuild it from the version that is installed now
+        let pid = st(&inst.state["modpack"], "project_id");
+        let cur = st(&inst.state["modpack"], "version");
+        if !pid.is_empty() {
+            let tmp = std::env::temp_dir().join(format!("orbit-oldpack-{:08x}", rand::random::<u32>()));
+            let old = (|| -> Res<PackInfo> {
+                let vs = pack_versions(&pid)?;
+                let v = vs.iter().find(|x| x["version_number"].as_str() == Some(cur.as_str())).ok_or("old version not listed")?;
+                fetch_pack_version(&pid, v["id"].as_str().unwrap_or(""), &tmp)
+            })();
+            if let Ok(o) = old { old_files = pack_file_list(&o); }
+            let _ = std::fs::remove_dir_all(&tmp);
+        }
+    }
+    let old_set: HashSet<String> = old_files.iter().cloned().collect();
+    let mut removed = 0;
+    // 1. drop what the old version shipped and the new one doesn't (content folders only: configs and saves are left alone)
+    for rel in &old_files {
+        if new_files.contains(rel) { continue; }
+        if dir_type(rel.split('/').next().unwrap_or("")).is_none() { continue; }
+        let Ok(t) = safe_join(&inst.root, rel) else { continue };
+        let dis = { let mut n = t.file_name().unwrap_or_default().to_os_string(); n.push(".disabled"); t.with_file_name(n) };
+        let mut gone = false;
+        for f in [&t, &dis] { if f.is_file() && std::fs::remove_file(f).is_ok() { gone = true; } }
+        let keys: Vec<String> = inst.mods().iter().filter(|(k, m)| **k == format!("pack:{rel}") || content_path(inst, m) == t).map(|(k, _)| k.clone()).collect();
+        for k in keys { inst.mods_mut().remove(&k); gone = true; }
+        if gone { removed += 1; }
+    }
+    // entries that came straight from a pack file we couldn't place (no recorded list): drop the ones the new pack doesn't have
+    if old_set.is_empty() {
+        let stale: Vec<String> = inst.mods().iter().filter(|(_, m)| m["source"] == "modpack" && !m["relpath"].as_str().map(|r| new_files.contains(r)).unwrap_or(false)).map(|(k, _)| k.clone()).collect();
+        for k in stale {
+            if let Some(m) = inst.mods().get(&k).cloned() { let _ = std::fs::remove_file(content_path(inst, &m)); }
+            inst.mods_mut().remove(&k); removed += 1;
+        }
+    }
+    if removed > 0 { log.push(format!("Removed {removed} files the new version doesn't use")); }
+    // 2. the instance follows the pack's game version and loader
+    inst.state["config"]["mc"] = json!(info.mc);
+    inst.state["config"]["loader"] = json!(info.loader);
+    if info.loader_version.is_empty() { inst.state["config"].as_object_mut().map(|o| o.remove("loader_version")); } else { inst.state["config"]["loader_version"] = json!(info.loader_version); }
+    inst.save()?;
+    // 3. everything the new version lists (apply_modpack skips files that are already identical)
+    apply_modpack(inst, info, log)
 }
 
 pub fn apply_modpack(inst: &mut Instance, info: &PackInfo, log: &mut Log) -> Res<()> {
@@ -292,11 +399,27 @@ pub fn apply_modpack(inst: &mut Instance, info: &PackInfo, log: &mut Log) -> Res
             else if let Some(h) = fe["hashes"]["sha1"].as_str() { (Some("sha1"), Some(h)) } else { (None, None) };
         let parent = target.parent().unwrap_or(&inst.root).to_path_buf();
         let fname = target.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+        // already here (enabled or switched off) and identical: keep it, and keep whatever entry already describes it
+        let dis = { let mut n = target.file_name().unwrap_or_default().to_os_string(); n.push(".disabled"); target.with_file_name(n) };
+        if file_matches(&target, fe) || file_matches(&dis, fe) {
+            if !inst.mods().values().any(|m| content_path(inst, m) == target) {
+                if let Some(t) = dir_type(rel.split('/').next().unwrap_or("")) {
+                    let stem = Path::new(&fname).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                    inst.mods_mut().insert(format!("pack:{rel}"), json!({"type": t, "title": stem, "slug": stem, "source": "modpack", "version_id": "",
+                        "version": info.version, "filename": fname, "relpath": rel, "explicit": true}));
+                }
+            }
+            log.push(format!("= [{}/{total}] {fname} (unchanged)", n + 1));
+            continue;
+        }
         for (k, u) in urls.iter().enumerate() {
             match download_file(u, &parent, &fname, algo, exp) { Ok(_) => break, Err(e) => if k == urls.len() - 1 { return Err(e); } }
         }
         let top = rel.split('/').next().unwrap_or("");
         if let Some(t) = dir_type(top) {
+            // a replaced file (same path, new build): drop the entry that described the old one
+            let old: Vec<String> = inst.mods().iter().filter(|(_, m)| content_path(inst, m) == target).map(|(k, _)| k.clone()).collect();
+            for k in old { inst.mods_mut().remove(&k); }
             let stem = Path::new(&fname).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
             inst.mods_mut().insert(format!("pack:{rel}"), json!({"type": t, "title": stem, "slug": stem, "source": "modpack", "version_id": "",
                 "version": info.version, "filename": fname, "relpath": rel, "explicit": true}));
@@ -315,7 +438,7 @@ pub fn apply_modpack(inst: &mut Instance, info: &PackInfo, log: &mut Log) -> Res
         let mut out = std::fs::File::create(&t).map_err(|e| e.to_string())?;
         std::io::copy(&mut e, &mut out).map_err(|e| e.to_string())?;
     }
-    inst.state["modpack"] = json!({"title": info.title, "version": info.version, "project_id": info.project_id});
+    inst.state["modpack"] = json!({"title": info.title, "version": info.version, "project_id": info.project_id, "version_id": info.version_id, "files": pack_file_list(info)});
     inst.save()?;
     // Match the pack's files (and any loose jars in its overrides) with Modrinth: real names, icons, update checks.
     // Not being able to reach Modrinth right now must not fail the install, so this is best effort.

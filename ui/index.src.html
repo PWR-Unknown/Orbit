@@ -5,6 +5,17 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 /* ---- themes (modelled on the Modrinth app: Dark, Light, OLED) ---- */
 :root,html[data-theme=oled]{--bg:#000;--bar:#000;--card:#16181c;--card2:#1d1f23;--line:#26292f;--input:#16181c;--btn:#26292f;--btnh:#30333a;--chip:#26292f;--text:#b0bac5;--head:#ecf9fb;--mut:#96a2b0;--accent:#1bd96a;--on:#000;--tint:rgba(27,217,106,.15);--shadow:rgba(0,0,0,.7)}
+html[data-theme=blackout]{--bg:#000;--bar:#000;--card:#000;--card2:#000;--line:#26282d;--input:#000;--btn:#000;--btnh:#101114;--chip:#000;--text:#b0bac5;--head:#ecf9fb;--mut:#8b96a3;--green:#000;--greenh:#0d0e10;--accent:#fff;--on:#fff;--onacc:#fff;--tint:rgba(255,255,255,.09);--shadow:rgba(0,0,0,1)}
+html[data-theme=blackout] .btn.brand{color:var(--onacc,#fff)}
+html[data-theme=blackout] .sw{border:1px solid var(--line);box-sizing:border-box}
+html[data-theme=blackout] .sw.on{background:var(--accent);border-color:var(--accent)}html[data-theme=blackout] .sw.on::after{background:#000}
+html[data-theme=blackout] .seg button.on,html[data-theme=blackout] #dlm .bdg{background:var(--accent);color:#000}
+html[data-theme=blackout] .fi.on .bx,html[data-theme=blackout] .cbx.on,html[data-theme=blackout] .cbx.mix{background:var(--accent);border-color:var(--accent);color:#000}
+html[data-theme=blackout] .dot.on,html[data-theme=blackout] .ptbar i,html[data-theme=blackout] .pbar i,html[data-theme=blackout] .schip.running i{background:var(--accent)}
+html[data-theme=blackout] .rad.on::after,html[data-theme=blackout] .th.on .rd::after{background:var(--accent)}
+html[data-theme=blackout] input[type=checkbox],html[data-theme=blackout] input[type=range]{accent-color:var(--accent)}
+html[data-theme=blackout] .btn.brand{border:1px solid color-mix(in srgb,var(--accent) 70%,transparent)}
+html[data-theme=blackout] .btn:not(.brand),html[data-theme=blackout] .chip,html[data-theme=blackout] select,html[data-theme=blackout] input[type=text]{border:1px solid var(--line)}
 html[data-theme=dark]{--bg:#16181c;--bar:#16181c;--card:#26292f;--card2:#2d3037;--line:#363a41;--input:#1d1f23;--btn:#34373e;--btnh:#3f434b;--chip:#34373e;--text:#b0bac5;--head:#ecf9fb;--mut:#96a2b0;--accent:#1bd96a;--on:#0b0d10;--tint:rgba(27,217,106,.15);--shadow:rgba(0,0,0,.5)}
 html[data-theme=light]{--bg:#f5f5f5;--bar:#fff;--card:#fff;--card2:#f0f1f3;--line:#dcdfe4;--input:#fff;--btn:#e6e8eb;--btnh:#d9dce0;--chip:#e9ebee;--text:#4a5058;--head:#16181c;--mut:#626b76;--accent:#0c8f48;--on:#04130a;--tint:rgba(12,143,72,.12);--shadow:rgba(0,0,0,.18)}
 /* ---- animated themes ---- */
@@ -116,12 +127,12 @@ input:focus,.dd-btn:focus,.dd.open .dd-btn,select.sel:focus{border-color:var(--g
 .spin{display:inline-block;width:16px;height:16px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .7s linear infinite}@keyframes s{to{transform:rotate(1turn)}}
 .toast{position:fixed;bottom:23px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);color:var(--head);padding:11px 21px;border-radius:16px;z-index:50;max-width:80vw;box-shadow:0 9px 27px var(--shadow)}
 /* home / library */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(194px,1fr));gap:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:14px}
 .inst{cursor:pointer;display:flex;flex-direction:column;gap:11px;padding:14px}.inst:hover,.jrow:hover{border-color:var(--green)}
 .inst .tile{width:100%;height:auto;aspect-ratio:1;border-radius:16px;font-size:64px}
 .jump{display:grid;grid-template-columns:repeat(auto-fill,minmax(389px,1fr));gap:14px;margin:14px 0 32px}
-.jrow{display:flex;align-items:center;gap:14px;padding:11px 14px;background:var(--card);border:1px solid var(--line);border-radius:16px;cursor:pointer}
-.jrow .tile{width:55px;height:55px;border-radius:11px;font-size:23px}
+.jrow{display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--card);border:1px solid var(--line);border-radius:16px;cursor:pointer}
+.jrow .tile{width:46px;height:46px;border-radius:10px;font-size:19px}
 .lib{display:flex;gap:11px;margin:14px 0 18px;align-items:center}.lib input{flex:1}
 /* discover */
 .dcol{flex:1;min-width:0;overflow-y:auto;padding:21px 25px 57px}
@@ -232,12 +243,12 @@ select.sel{background:var(--btn);color:var(--head);border:0;border-radius:11px;p
 .ib{width:39px;height:39px;border-radius:11px;border:0;background:none;color:var(--text);cursor:pointer;display:grid;place-items:center;flex:none}.ib:hover{background:var(--btn);color:var(--head)}
 .ib.sq{background:var(--btn);width:46px;height:46px;border-radius:11px}.ib.sq:hover{background:var(--btnh)}
 .pw{display:inline-flex;flex:none}.pw .btn{min-width:110px;justify-content:center}.btn.stop{border-color:var(--red);color:var(--red)}.btn.stop:hover{background:rgba(255,73,110,.12)}
-.jump{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,434px),1fr));gap:14px;margin:0 0 32px}
-.jrow{display:flex;align-items:center;gap:14px;padding:11px 14px;background:var(--card);border:1px dashed var(--line);border-radius:16px;cursor:pointer}
-.jrow .tile{width:55px;height:55px;border-radius:11px;font-size:23px}.newc{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--green);color:var(--accent);border-radius:9999px;padding:0 10px;font-size:14px;font-weight:600;margin-left:9px}
-.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(331px,1fr));gap:14px}
-.lcard{display:flex;align-items:center;gap:14px;padding:11px 14px;background:var(--card);border:1px solid var(--line);border-radius:16px;cursor:pointer;min-width:0}.lcard:hover{border-color:var(--green)}
-.lcard .tile{width:50px;height:50px;border-radius:11px;font-size:21px}
+.jump{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:12px;margin:0 0 28px}
+.jrow{display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--card);border:1px dashed var(--line);border-radius:16px;cursor:pointer}
+.jrow .tile{width:46px;height:46px;border-radius:10px;font-size:19px}.newc{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--green);color:var(--accent);border-radius:9999px;padding:0 10px;font-size:14px;font-weight:600;margin-left:9px}
+.lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(284px,1fr));gap:12px}
+.lcard{display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--card);border:1px solid var(--line);border-radius:16px;cursor:pointer;min-width:0}.lcard:hover{border-color:var(--green)}
+.lcard .tile{width:40px;height:40px;border-radius:9px;font-size:17px}
 .acc{padding:7px 0 16px}.acc .t{color:var(--head);font-weight:600;margin-bottom:11px}
 .accbtn{display:flex;align-items:center;gap:14px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:9px 14px;cursor:pointer;text-align:left}.accbtn:hover{border-color:var(--green)}
 .av{width:43px;height:43px;border-radius:9px;overflow:hidden;display:block;flex:none}.av svg{width:100%;height:100%;display:block;image-rendering:pixelated}
@@ -315,6 +326,7 @@ textarea{width:100%;background:var(--input);border:1px solid var(--line);border-
 .cols{display:flex;gap:9px;flex-wrap:wrap}.cols button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 2px var(--bg)}.cols button.on{border-color:var(--head)}
 .pills{display:flex;gap:9px;flex-wrap:wrap}
 .opt2{border:1px solid transparent;background:var(--card2);color:var(--text);border-radius:16px;padding:9px 16px;font-weight:600;cursor:pointer;display:inline-flex;gap:7px;align-items:center}.opt2:hover:not([disabled]):not(.on){background:var(--btn);color:var(--head)}
+.mpv{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;margin:12px 0 4px}.mpr{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:10px 14px}.mpr.cur{border-color:var(--green);background:var(--tint)}.mpr .mi{flex:1;min-width:0}.mpr .mi b{font-size:16px}.mpr .mi .ms{color:var(--mut);font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mpr .tp{font-size:12px;border-radius:9999px;padding:1px 8px;border:1px solid var(--line);color:var(--mut);margin-left:8px;font-weight:500}.mpr .tp.beta,.mpr .tp.alpha{color:#e6a23c;border-color:#e6a23c}
 .opt2.on{border-color:var(--green);background:var(--tint);color:var(--accent)}.opt2[disabled]{opacity:.5;cursor:default}
 .xin{position:relative}.xin input{padding-right:46px}.xin .ib{position:absolute;right:5px;top:50%;transform:translateY(-50%)}
 .xt{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--bg)}
@@ -368,14 +380,14 @@ button,nav,.nb,.tile,.sw,.ptabs,.pill,.wm,.ar,.ib{-webkit-user-select:none;user-
 /* ---- high contrast + accent colour picker (settings > appearance) ---- */
 html[data-contrast=high]{--text:#fff;--head:#fff;--mut:#e6e6e6;--line:#9aa0a8;--btn:#2b2f36;--btnh:#3c414a;--chip:#2b2f36}
 html[data-theme=light][data-contrast=high]{--bg:#fff;--card2:#fff;--text:#000;--head:#000;--mut:#1c1f24;--line:#4a4f58;--btn:#dfe2e6;--btnh:#cdd1d6;--chip:#dfe2e6}
+html[data-theme=blackout][data-contrast=high]{--bg:#000;--card2:#000;--btn:#000;--btnh:#14151a;--chip:#000;--line:#8a9099}
 html[data-contrast=high] .btn,html[data-contrast=high] .card,html[data-contrast=high] .note,html[data-contrast=high] input[type=text],html[data-contrast=high] select,html[data-contrast=high] .chip{border:1px solid var(--line)}
 html[data-contrast=high] .meta,html[data-contrast=high] .note,html[data-contrast=high] .d{color:var(--text)}
 html[data-contrast=high] :focus-visible{outline:3px solid var(--head);outline-offset:2px}
 .swts{display:flex;gap:11px;flex-wrap:wrap;align-items:center;margin:11px 0 7px}
 .swt{width:37px;height:37px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(128,128,128,.45)}
 .swt.on{border-color:var(--head);outline:2px solid var(--bg);outline-offset:-5px}
-.swt.cust{position:relative;overflow:hidden;background:conic-gradient(#f66,#fd6,#6f9,#6df,#96f,#f6c,#f66)}
-.swt.cust input{position:absolute;inset:-9px;width:55px;height:55px;opacity:0;cursor:pointer}
+.cacc{display:flex;align-items:center;gap:11px;margin:4px 0 7px;flex-wrap:wrap}.cacc .l{margin:0}.cacc input[type=color]{width:46px;height:37px;padding:3px;border:1px solid var(--line);border-radius:11px;background:var(--card);cursor:pointer}.cacc input[type=text]{width:112px;height:37px;box-sizing:border-box;padding:0 12px;border-radius:11px;font-family:inherit}.cacc .btn{height:37px;box-sizing:border-box;padding:0 16px}
 /* jump in rows: name + info stay on one line (ellipsis); the extra "Another account" button collapses to an icon so Play/Stop never squeeze the text */
 .jrow .grow{min-width:0}.jrow .grow .meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jrow .pw{gap:8px;align-items:center}.jrow .pw .btn[data-more]{font-size:0;gap:0;min-width:0;padding:10px 12px}
@@ -444,7 +456,7 @@ const mq=matchMedia("(prefers-color-scheme: light)");
 function applyTheme(t){const real=t==="system"?(mq.matches?"light":"dark"):t;document.documentElement.dataset.theme=real;applyAccent(S.settings&&S.settings.accent)}
 /* the daily server restart needs the local clock; the window reports its UTC offset (minutes east) */
 function reportTz(){api("/settings","POST",{tz_offset:-new Date().getTimezoneOffset()}).catch(()=>{})}
-function applyLook(){const R=document.documentElement;if(S.settings.high_contrast)R.dataset.contrast="high";else delete R.dataset.contrast;R.dataset.anim=(S.settings.animations===false||window.__orbPaused)?"off":"on";applyTheme(S.settings.theme||"oled");FX.sync()}
+function applyLook(){const R=document.documentElement;if(S.settings.high_contrast!==false)R.dataset.contrast="high";else delete R.dataset.contrast;R.dataset.anim=(S.settings.animations===false||window.__orbPaused)?"off":"on";applyTheme(S.settings.theme||"oled");FX.sync()}
 /* accent colour: fills use the colour as picked; text in the accent colour is nudged until it is readable on the current theme (7:1 in high contrast) */
 const hexRGB=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16)),rgbHex=a=>"#"+a.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,"0")).join("");
 const mixHex=(h,t,a)=>{const x=hexRGB(h),y=hexRGB(t);return rgbHex(x.map((v,i)=>v+(y[i]-v)*a))};
@@ -458,7 +470,7 @@ function applyAccent(hex){
   if(!HEX.test(hex||""))return;   // "" = keep the theme's own accent
   const th=R.dataset.theme,hc=R.dataset.contrast==="high",need=hc?7:4.5,LT=/light$/.test(th),card=cs.getPropertyValue("--card").trim(),bg=HEX.test(card)?card:LT?"#ffffff":"#26292f",toward=LT?"#000000":"#ffffff";
   let txt=hex;for(let i=0;i<24&&contrastOf(txt,bg)<need;i++)txt=mixHex(txt,toward,.1);
-  const onFill=contrastOf(hex,"#04130a")>=contrastOf(hex,"#ffffff")?"#04130a":"#ffffff",[r,g,b]=hexRGB(hex);
+  const lum=contrastOf(hex,"#000000")*.05-.05,onFill=lum<.3?"#ffffff":"#04130a",[r,g,b]=hexRGB(hex);   /* dark fill = white text (switches before the usual contrast crossover, so dim colors never get dark text) */
   st.setProperty("--green",hex);st.setProperty("--greenh",mixHex(hex,"#ffffff",.18));st.setProperty("--accent",txt);
   st.setProperty("--tint",`rgba(${r},${g},${b},${LT?.14:.18})`);st.setProperty("--on",onFill);st.setProperty("--onacc",onFill)}
 mq.addEventListener&&mq.addEventListener("change",()=>{if(S.settings.theme==="system")applyTheme("system")});
@@ -471,10 +483,10 @@ const FX=(()=>{
   const R=document.documentElement,cv=document.createElement("canvas"),cx=cv.getContext("2d");
   cv.id="fx";cv.setAttribute("aria-hidden","true");document.body.appendChild(cv);
   const COL=4,CS=5,WEB_SECS=150,rnd=(a,b)=>a+Math.random()*(b-a);
-  let gmax=34,cmax=8,tmax=6.5,spd=1;   /* snow limits + fall speed; set from Settings by cfg() */
+  let gmax=34,cmax=8,tmax=6.5,spd=1,radm=1;   /* snow limits + fall speed; set from Settings by cfg() */
   let W=0,H=0,mode=null,fam=null,dark=true,raf=0,last=0,t=0,frame=0,flakes=[],puffs=[],ground=new Float32Array(0),cards=[],cardSnow=new Map(),surfs=[],slabs=[],chunks=[],treeS=[],mainR=null,motes=[],wsp=[],webT0=0,glOn=false,glT=0;
   const M={x:-999,y:-999,vx:0,vy:0,down:false,in:false};
-  let men=[],hinted=false;   /* snowmen: {x, s: stage 1-4, d: height the newest piece still has to fall, dv: its speed, ty: click y (until the fall starts)} */
+  let men=[],gone=[],hinted=false;   /* snowmen: {x, s: stage 1-4, d: height the newest piece still has to fall, dv: its speed, ty: click y (until the fall starts)} */
   const blocked=()=>{const o=document.getElementById("over");return !!(o&&o.childElementCount)};
 
   function resize(){const d=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=Math.round(W*d);cv.height=Math.round(H*d);cx.setTransform(d,0,0,d,0,0);
@@ -578,7 +590,7 @@ const FX=(()=>{
 
   function christmas(k){
     const want=Math.min(150,Math.round(W/11));while(flakes.length<want)flakes.push(flake(flakes.length<20));
-    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=M.down?95:58,ts=H<520?.6:.9,tr=treeSurfs(W-95,H+3,ts);surfs=[...tr,...cards];
+    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=(M.down?95:58)*radm,ts=H<520?.6:.9,tr=treeSurfs(W-95,H+3,ts);surfs=[...tr,...cards];
     for(const f of flakes){
       f.ph+=.018*k*spd;const py=f.y;f.x+=(Math.sin(f.ph)*.35*Math.min(spd,3)+f.ix)*k;f.y+=(f.vy*spd+f.iy)*k;f.ix*=Math.pow(.93,k);f.iy*=Math.pow(.93,k);
       if(act){const dx=f.x-M.x,dy=f.y-M.y,d2=dx*dx+dy*dy;if(d2<(rad+30)*(rad+30)){const d=Math.sqrt(d2)||1,s=1-Math.min(1,d/(rad+30));f.ix+=(dx/d*s*1.6+M.vx*.05*s)*k;f.iy+=(dy/d*s*1.1+M.vy*.05*s)*k}}
@@ -590,12 +602,14 @@ const FX=(()=>{
     if(frame%15===0)checkSlide();
     /* swipe: hovering clears a little, dragging clears everything under the cursor */
     if(act&&(sp>.6||M.down)){
-      const amt=M.down?99:1.2+sp*.45,sub=(a,i)=>{a[i]=a[i]-amt<.2?0:a[i]-amt};
-      for(let i=0;i<ground.length;i++){const x=i*COL,dx=Math.abs(x-M.x);if(dx>rad)continue;const reach=Math.sqrt(rad*rad-dx*dx),top=H-ground[i];
+      let hitMan=false;const keep=men.map(m=>m.x).concat(gone.filter(g=>frame-g.f<240).map(g=>g.x));
+      if(M.down)for(let q=men.length-1;q>=0;q--){const m=men[q];if(Math.hypot(m.x-M.x,gy(m.x)-45-M.y)<rad+25){puff(m.x,gy(m.x)-45,14,M.vx,M.vy);const nn=4+m.s*3,mm=12+m.s*6;for(let j=0;j<nn;j++)chunks.push({x:m.x+rnd(-12,12),y:gy(m.x)-rnd(15,60),vx:rnd(-1.3,1.3)+M.vx*.1,vy:rnd(-3.2,-.4),m:mm,r:Math.min(10,2+Math.sqrt(mm)*.4),age:0});gone.push({x:m.x,f:frame});men.splice(q,1);hitMan=true;keep.push(m.x)}}
+      if(gone.length>20)gone.splice(0,gone.length-20);{const amt=M.down?99:1.2+sp*.45,sub=(a,i)=>{a[i]=a[i]-amt<.2?0:a[i]-amt};
+      for(let i=0;i<ground.length;i++){const x=i*COL,dx=Math.abs(x-M.x);if(dx>rad)continue;if(keep.some(kx=>Math.abs(kx-x)<48))continue;const reach=Math.sqrt(rad*rad-dx*dx),top=H-ground[i];
         if(M.y+reach>top&&ground[i]>0){if(ground[i]>3&&Math.random()<.1)puff(x,top,1,M.vx,M.vy);sub(ground,i)}}
       for(const c of surfs){const s=c.sn;for(let i=0;i<s.length;i++){const x=c.l+i*CS,dx=Math.abs(x-M.x);if(dx>rad||s[i]<=0)continue;const reach=Math.sqrt(rad*rad-dx*dx);
         if(Math.abs(c.y(x)-M.y)<reach+s[i]){if(Math.random()<.12)puff(x,c.y(x)-s[i],1,M.vx,M.vy);sub(s,i)}}}
-      if(M.down)for(let q=men.length-1;q>=0;q--){const m=men[q];if(Math.hypot(m.x-M.x,gy(m.x)-45-M.y)<rad+25){puff(m.x,gy(m.x)-45,14,M.vx,M.vy);const nn=4+m.s*3,mm=12+m.s*6;for(let j=0;j<nn;j++)chunks.push({x:m.x+rnd(-12,12),y:gy(m.x)-rnd(15,60),vx:rnd(-1.3,1.3)+M.vx*.1,vy:rnd(-3.2,-.4),m:mm,r:Math.min(10,2+Math.sqrt(mm)*.4),age:0});men.splice(q,1)}}
+      }
       for(let q=slabs.length-1;q>=0;q--){const b=slabs[q];if(Math.hypot(b.lastX-M.x,b.lastY-M.y)<rad){puff(b.lastX,b.lastY,8,M.vx,M.vy);slabs.splice(q,1)}}
     }
     updateSlabs(k);updateChunks(k);
@@ -724,7 +738,7 @@ const FX=(()=>{
     if(g>.5)spider(mainR.right-14-Rd*.42,24+34*(.5+.5*Math.sin(t*.5)),Math.min(1,(g-.5)*2));
     [[.05,32],[.17,24],[.33,38],[.5,27],[.66,35],[.8,25],[.93,30]].forEach(([fx,r],i)=>{if(fx*W>56)pumpkin(fx*W,H-1,r,i)});
     const want=Math.min(90,Math.round(W/16));while(motes.length<want)motes.push(mote(true));
-    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=M.down?130:85;cx.fillStyle=dark?"#e6dff5":"#6a4a8a";
+    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=(M.down?130:85)*radm;cx.fillStyle=dark?"#e6dff5":"#6a4a8a";
     for(let i=0;i<motes.length;i++){const p=motes[i];p.ph+=.012*k;
       p.vx+=(Math.sin(p.ph*1.3+p.s)*.012-p.vx*.02)*k;p.vy+=(p.base+Math.cos(p.ph)*.03-p.vy)*.03*k;
       if(act){const dx=p.x-M.x,dy=p.y-M.y,d2=dx*dx+dy*dy;if(d2<rad*rad){const d=Math.sqrt(d2)||1,s=1-d/rad;p.vx+=(dx/d*s*.9+M.vx*.07*s)*k;p.vy+=(dy/d*s*.7+M.vy*.07*s)*k;if((sp>8||M.down)&&s>.15)p.st=2}}
@@ -747,7 +761,7 @@ const FX=(()=>{
     const go=()=>{glT=setTimeout(()=>{R.classList.add("glx");glT=setTimeout(()=>{R.classList.remove("glx");go()},120+Math.random()*160)},2200+Math.random()*4800)};go()}
 
   /* Settings > Appearance > Christmas snow: max pile height (px) and fall speed (%). Boxes hold 24% of the floor height, the tree 80% of that. */
-  function cfg(){const st=S.settings||{};gmax=Math.max(4,Math.min(100,+st.snow_height||34));cmax=Math.max(2.5,gmax*.24);tmax=cmax*.8;spd=Math.max(.1,Math.min(10,(+st.snow_speed||100)/100))}
+  function cfg(){const st=S.settings||{};radm=Math.max(.2,Math.min(2,(+st.mouse_radius||50)/50));gmax=Math.max(4,Math.min(100,+st.snow_height||34));cmax=Math.max(2.5,gmax*.24);tmax=cmax*.8;const sf=st.snow_fall!=null?+st.snow_fall:Math.round((+st.snow_speed||100)/10);spd=Math.max(.1,Math.min(10,(Math.max(1,Math.min(100,sf||10)))/10))}
 
   /* called when the theme, the animation switch or the page changes */
   function sync(){cfg();
@@ -973,14 +987,18 @@ function popEl(items){
   const p=document.createElement("div");p.className="pop";
   p.innerHTML=items.map((it,n)=>it?`<button data-n="${n}" class="${it[2]===1?"red":it[2]==="accent"?"accent":""}${Array.isArray(it[3])?" sub":""}">${ic(it[1],"sm")}${it[0]}${Array.isArray(it[3])?ic("fwd","sm"):""}</button>`:"<hr>").join("");
   p.querySelectorAll("button").forEach(b=>{const it=items[b.dataset.n];
-    if(Array.isArray(it[3])){b.onclick=b.onmouseenter=()=>openSub(b,it[3])}
-    else{b.onmouseenter=()=>document.querySelectorAll(".psub").forEach(x=>x.remove());b.onclick=e=>{e.stopPropagation();closePops();it[3]()}}});
+    if(Array.isArray(it[3])){b.onclick=b.onmouseenter=()=>{clearTimeout(subT);openSub(b,it[3])}}
+    else{b.onmouseenter=()=>{if(!p.classList.contains("psub"))subClose()};b.onclick=e=>{e.stopPropagation();closePops();it[3]()}}});
   return p;
 }
+let subT=0;
+/* other rows only close the submenu after a short delay, so you can cross them on the way to it; entering the submenu cancels the close */
+function subClose(){clearTimeout(subT);subT=setTimeout(()=>document.querySelectorAll(".psub").forEach(x=>x.remove()),350)}
 function openSub(b,items){
   document.querySelectorAll(".psub").forEach(x=>x.remove());
   const s=popEl(items),r=b.getBoundingClientRect();s.classList.add("psub");document.body.append(s);
-  placePop(s,r.right+4+s.offsetWidth>innerWidth?r.left-s.offsetWidth-4:r.right+4,r.top-6);
+  s.addEventListener("mouseenter",()=>clearTimeout(subT));
+  placePop(s,r.right+s.offsetWidth>innerWidth?r.left-s.offsetWidth+2:r.right-2,r.top-6);
 }
 /* anchored under `btn`, or at the cursor when `at` = {x,y} (right-click) */
 function popMenu(btn,items,at){
@@ -1459,10 +1477,37 @@ function instInstall(p,d){
   p.innerHTML=`<h3>Installation</h3><div class="d">Switch the platform or versions of this instance without recreating it.</div>
   <div class="ibox"><div><span>Platform</span><b>${esc(LOADERS[d.loader]||d.loader)}</b></div><div><span>Game version</span><b>${esc(d.mc)}</b></div>${d.loader!=="vanilla"?`<div><span>${esc(LOADERS[d.loader]||d.loader)} version</span><b>${esc(d.loader_version||"Latest stable")}</b></div>`:""}</div>
   <div id="ied2"><button class="btn warn" id="ie" ${locked?"disabled":""}>${ic("brush","sm")}Edit</button><div class="note" style="margin-top:9px">${locked?"Close the game before changing its installation.":"We don't recommend editing your installation settings after installing content. If you want to edit them, be cautious as it may cause issues."}</div></div>
+  ${d.modpack&&d.modpack.project_id?`<h3 style="margin-top:27px">Modpack version</h3><div class="d">Update or downgrade ${esc(d.modpack.title||"this modpack")} without making a new instance. Your worlds and settings stay.</div>
+  <div class="ibox"><div><span>Modpack</span><b>${esc(d.modpack.title||"")}</b></div><div><span>Installed version</span><b>${esc(d.modpack.version||"Unknown")}</b></div></div>
+  <div><button class="btn" id="mpv" ${locked?"disabled":""}>${ic("refresh","sm")}Change version</button></div>`:""}
   <h3 style="margin-top:27px">Repair instance</h3><div style="margin:9px 0"><button class="btn" id="irp">${ic("refresh","sm")}Repair</button></div>
   <div class="note">Reinstalls Minecraft dependencies and checks for corruption. This may resolve issues if your game is not launching due to launcher-related errors.</div>`;
   $("#irp").onclick=async()=>{try{const r=await api(`/instances/${d.id}/repair`,"POST",{});S.detail=r;toast(r.log[0],6000)}catch(e){toast(e.message,6000)}};
   $("#ie").onclick=()=>instEdit(p,d);
+  if($("#mpv"))$("#mpv").onclick=()=>modpackVersions(p,d);
+}
+async function modpackVersions(p,d){
+  cshell("Modpack version",`<div class="note" id="mpn">Loading versions from Modrinth...</div>`,{w:640});
+  let r;try{r=await api(`/instances/${d.id}/modpack-versions`)}catch(e){closeOver();return toast(e.message,6000)}
+  if(!r.linked||!r.versions.length){closeOver();return toast("This modpack isn't linked to Modrinth, so its other versions can't be listed.",6000)}
+  let beta=false;const cur=r.versions.find(v=>v.current),curT=cur?Date.parse(cur.date):0;
+  const draw=()=>{const list=r.versions.filter(v=>v.current||beta||v.type==="release");
+    $(".cbody").innerHTML=`<div class="d">${esc(r.title||"")} - installed: <b>${esc(r.version||"unknown")}</b>. Pick a version to switch to. Files the other version doesn't use are removed, changed ones are replaced.</div>
+    <label class="tog"><input type="checkbox" id="mpb" ${beta?"checked":""}> Show beta and alpha versions</label>
+    <div class="mpv">${list.map(v=>{const t=Date.parse(v.date),lab=v.current?"Installed":(t>curT?"Update":"Downgrade");
+      return `<div class="mpr ${v.current?"cur":""}"><div class="mi"><b>${esc(v.version_number)}</b><span class="tp ${esc(v.type)}">${esc(v.type)}</span><div class="ms">${esc((v.mc||[]).slice(-3).join(", "))} - ${esc((v.loaders||[]).join(", "))} - ${new Date(v.date).toLocaleDateString()}${v.name&&v.name!==v.version_number?" - "+esc(v.name):""}</div></div>
+      ${v.current?`<span class="badge">Installed</span>`:`<button class="btn sm ${lab==="Update"?"brand":""}" data-v="${esc(v.id)}">${lab}</button>`}</div>`}).join("")}</div>
+    <div class="note">Switching can change the Minecraft version or loader. Worlds are not touched, but a world played on a newer version may not open on an older one, so back it up first.</div>`;
+    $("#mpb").onchange=e=>{beta=e.target.checked;draw()};
+    $(".mpv").querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>pick(r.versions.find(v=>v.id===b.dataset.v)))};
+  const pick=async v=>{
+    const t=Date.parse(v.date),word=t>curT?"Update":"Downgrade";
+    if(!confirm(`${word} ${r.title} from ${r.version} to ${v.version_number}?\n\nMinecraft: ${(v.mc||[]).slice(-3).join(", ")}\nThis replaces the pack's mods and config files. Your worlds and screenshots stay.`))return;
+    closeOver();const wait=toast(`${word}ing to ${v.version_number}. This can take a few minutes...`,900000);
+    const tk=addTask(d.name||"Instance",d.icon?iconUrl(d):"",`${word} to ${v.version_number}`);
+    try{const x=await api(`/instances/${d.id}/modpack-switch`,"POST",{version_id:v.id,task:tk.id});S.detail=x;wait.remove();endTask(tk,true);S.upd={};S.instances=(await api("/instances")).instances;toast(`Now on ${v.version_number}. Press Update all if some mods need builds for the new version.`,7000);render()}
+    catch(e){wait.remove();endTask(tk,false,e.message);toast(e.message,8000)}};
+  draw();
 }
 async function instEdit(p,d){
   let loader=d.loader,mc=d.mc,lvv=d.loader_version||"",data=null,lv=null,lvErr="",seq=0,mcdd,lvdd;
@@ -2064,7 +2109,8 @@ function drawProj(m){
   const pj=S.pj,d=pj.data,c=pj.ctx,inst=c&&c.content.find(x=>x.key===d.id);
   const fm=n=>fmt(n);
   const head=c?`<div class="pgb"><button class="ar2" id="pback" aria-label="Back">${ic("back","sm")}</button>${tile(c.name,iconUrl(c))}<div><b style="color:var(--head);font-size:19px">${esc(c.name)}</b><div class="meta">Installing content &nbsp;·&nbsp; Minecraft ${esc(c.mc)} &nbsp;·&nbsp; ${esc(LOADERS[c.loader]||c.loader)}</div></div></div>`:`<div class="pgb"><button class="ar2" id="pback" aria-label="Back">${ic("back","sm")}</button><b style="color:var(--head)">Back</b></div>`;
-  const btn=!c?`<button class="btn brand" id="pin">${ic("plus","sm")}Add to an instance</button>`:inst&&pj.tab==="ver"?`<button class="btn" disabled>${ic("check","sm")}Installed</button>`:inst?`<button class="btn" id="psw">${ic("swap","sm")}Switch version</button>`:`<button class="btn brand" id="pin">${ic("plus","sm")}Install</button>`;
+  const isPack=d.type==="modpack";
+  const btn=isPack?`<button class="btn brand" id="ppk">${ic("plus","sm")}Install modpack</button>`:!c?`<button class="btn brand" id="pin">${ic("plus","sm")}Add to an instance</button>`:inst&&pj.tab==="ver"?`<button class="btn" disabled>${ic("check","sm")}Installed</button>`:inst?`<button class="btn" id="psw">${ic("swap","sm")}Switch version</button>`:`<button class="btn brand" id="pin">${ic("plus","sm")}Install</button>`;
   let body;
   if(pj.tab==="desc")body=`<div class="md">${md(d.body)||esc(d.description)}</div>`;
   else if(!pj.versions)body=`<div class="empty"><span class="spin"></span></div>`;
@@ -2076,7 +2122,7 @@ function drawProj(m){
     const sel=(id,label,val,opts)=>`<select class="sel" id="${id}"><option value="">${label}</option>${opts.map(o=>`<option value="${esc(o[0])}" ${o[0]===val?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`;
     body=`<div class="vf">${ic("filter","sm")}${sel("fch","Channel",F.ch,[["release","Release"],["beta","Beta"],["alpha","Alpha"]])}${sel("fmc","Game version",F.mc,sorted.map(x=>[x,x]))}${lds.length>1||F.ld?sel("fld","Platform",F.ld,lds.map(x=>[x,pretty(x)])):""}${F.ch||F.mc||F.ld?`<button class="lnk" id="fcl">Clear</button>`:""}</div>
     <div class="tbl vt"><div class="tr h"><span>Version</span><span>Game version</span><span>Platform</span><span>Published</span><span>Downloads</span><span></span></div>
-    ${list.length?list.map((v,i)=>{const cur=inst&&inst.version_id===v.id;return `<div class="tr"><div class="vsn"><span class="rdot ${v.type}">${v.type[0].toUpperCase()}</span><b>${esc(v.number)}</b></div><div class="gv">${v.game_versions.slice(-3).reverse().map(x=>`<span class="chip">${esc(x)}</span>`).join("")}${v.game_versions.length>3?`<span class="chip">+${v.game_versions.length-3}</span>`:""}</div><div class="gv">${v.loaders.slice(0,2).map(x=>`<span class="chip">${esc(pretty(x))}</span>`).join("")}</div><span class="meta">${esc(ago(v.date))}</span><span class="meta">${fmt(v.downloads)}</span><div class="act">${c?(cur?`<button class="ib cur" disabled aria-label="Installed" title="Installed">${ic("check","sm")}</button>`:`<button class="ib upd" data-vi="${i}" aria-label="${inst?"Switch to":"Install"} ${esc(v.number)}" title="${inst?"Switch to this version":"Install this version"}">${ic(inst?"swap":"dl","sm")}</button>`):""}<button class="ib" data-vu="${i}" aria-label="Open on Modrinth" title="Open on Modrinth">${ic("link","sm")}</button></div></div>`}).join(""):`<div class="empty">No versions match these filters.</div>`}</div>`;
+    ${list.length?list.map((v,i)=>{const cur=inst&&inst.version_id===v.id;return `<div class="tr"><div class="vsn"><span class="rdot ${v.type}">${v.type[0].toUpperCase()}</span><b>${esc(v.number)}</b></div><div class="gv">${v.game_versions.slice(-3).reverse().map(x=>`<span class="chip">${esc(x)}</span>`).join("")}${v.game_versions.length>3?`<span class="chip">+${v.game_versions.length-3}</span>`:""}</div><div class="gv">${v.loaders.slice(0,2).map(x=>`<span class="chip">${esc(pretty(x))}</span>`).join("")}</div><span class="meta">${esc(ago(v.date))}</span><span class="meta">${fmt(v.downloads)}</span><div class="act">${isPack?`<button class="ib upd" data-vp="${i}" aria-label="Install ${esc(v.number)} as a new instance" title="Install this version as a new instance">${ic("dl","sm")}</button>`:c?(cur?`<button class="ib cur" disabled aria-label="Installed" title="Installed">${ic("check","sm")}</button>`:`<button class="ib upd" data-vi="${i}" aria-label="${inst?"Switch to":"Install"} ${esc(v.number)}" title="${inst?"Switch to this version":"Install this version"}">${ic(inst?"swap":"dl","sm")}</button>`):""}<button class="ib" data-vu="${i}" aria-label="Open on Modrinth" title="Open on Modrinth">${ic("link","sm")}</button></div></div>`}).join(""):`<div class="empty">No versions match these filters.</div>`}</div>`;
     pj._list=list;
   }
   const gv=[...d.game_versions].reverse(),shown=gv.slice(0,24),tag=x=>`<span class="chip">${esc(x)}</span>`;
@@ -2096,6 +2142,7 @@ function drawProj(m){
   $("#pback").onclick=()=>S.hi>0?step(-1):go("home");
   m.querySelectorAll("[data-pt]").forEach(b=>b.onclick=()=>{pj.tab=b.dataset.pt;drawProj(m);if(pj.tab==="ver"&&!pj.versions)loadPV(m)});
   $("#pmn").onclick=e=>popMenu(e.currentTarget,[["Open on Modrinth","link",false,()=>openUrl(d.url)],["Copy link","file",false,()=>navigator.clipboard&&navigator.clipboard.writeText(d.url).then(()=>toast("Link copied"))]]);
+  if($("#ppk"))$("#ppk").onclick=e=>installPackPage(d,null,e.currentTarget);
   if($("#psw"))$("#psw").onclick=()=>{pj.tab="ver";drawProj(m);if(!pj.versions)loadPV(m)};
   if($("#pin"))$("#pin").onclick=()=>c?projInstall(m):pickInstance({source:"modrinth",ident:d.slug,title:d.title,icon_url:d.icon_url,url:d.url},d.type);
   if(pj.tab==="ver"&&pj.versions){
@@ -2103,8 +2150,16 @@ function drawProj(m){
     [["fch","ch"],["fmc","mc"],["fld","ld"]].forEach(([id,k])=>{const e=$("#"+id);if(e)e.onchange=()=>{pj.vf[k]=e.value;re()}});
     if($("#fcl"))$("#fcl").onclick=()=>{pj.vf={ch:"",mc:"",ld:""};re()};
     m.querySelectorAll("[data-vi]").forEach(b=>b.onclick=()=>projInstall(m,pj._list[+b.dataset.vi]));
+    m.querySelectorAll("[data-vp]").forEach(b=>b.onclick=()=>installPackPage(d,pj._list[+b.dataset.vp],b));
     m.querySelectorAll("[data-vu]").forEach(b=>b.onclick=()=>openUrl(`${d.url}/version/${pj._list[+b.dataset.vu].id}`));
   }
+}
+async function installPackPage(d,v,btn){
+  const old=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
+  const label=v?`${d.title} ${v.number}`:d.title;
+  const t=toast(`Installing ${label}. This can take a few minutes...`,900000),tk=addTask(d.title,d.icon_url,"Instance installation");
+  try{const r=await api("/modpack/install","POST",{source:"modrinth",ident:d.slug,version_id:v?v.id:"",task:tk.id});t.remove();endTask(tk,true,"Instance installation");toast(r.log.slice(-1)[0]||"Installed",4000);S.instances=(await api("/instances")).instances;go("inst",r.id)}
+  catch(e){t.remove();endTask(tk,false,e.message);toast(e.message,8000);btn.disabled=false;btn.innerHTML=old}
 }
 async function projInstall(m,v){
   const pj=S.pj,d=pj.data,c=pj.ctx;
@@ -2233,14 +2288,14 @@ function settingsModal(sec="appearance"){
   api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,java:pJava,window:pWindow,hooks:pHooks,syncing:pSyncing,playtime:pPlaytime,accounts:pAccounts,curseforge:pCF,about:pAbout})[sec]($("#sp"))});
 }
 const AC=[["Theme default",""],["Orbit green","#1bd96a"],["Blue","#4c8dff"],["Purple","#a56bff"],["Pink","#ff5fa2"],["Orange","#ff9a3c"],["Red","#ff496e"],["Teal","#2ad4c9"]];
-const THEME_ACC={"christmas-light":"#c8222d","christmas-dark":"#d6313d","halloween-light":"#e8650a","halloween-dark":"#ff7a18",glitch:"#00e5ff",synthwave:"#ff2fb8",aurora:"#2fe0a8"};
-const SNL={snow_height:[4,10,20,34,50,70,100],snow_speed:[10,25,50,75,100,150,200,300,500,1000]},SNU={snow_height:" px",snow_speed:"%"},SND={snow_height:34,snow_speed:100};
+const THEME_ACC={blackout:"#000","christmas-light":"#c8222d","christmas-dark":"#d6313d","halloween-light":"#e8650a","halloween-dark":"#ff7a18",glitch:"#00e5ff",synthwave:"#ff2fb8",aurora:"#2fe0a8"};
+const SNL={snow_height:[4,10,20,34,50,70,100],snow_fall:[1,2,5,10,15,25,40,60,80,100],mouse_radius:[10,20,30,40,50,60,70,80,90,100]},SNU={snow_height:" px",snow_fall:"%",mouse_radius:"%"},SND={snow_height:34,snow_fall:10,mouse_radius:50};
 function pAppearance(p){
-  const cur=S.settings.theme||"oled",animOn=S.settings.animations!==false,snH=Math.max(4,Math.min(100,+S.settings.snow_height||34)),snS=Math.max(10,Math.min(1000,+S.settings.snow_speed||100)),xmas=/^christmas/.test(cur),batOn=UF().batsave!==false;
+  const cur=S.settings.theme||"oled",animOn=S.settings.animations!==false,snH=Math.max(4,Math.min(100,+S.settings.snow_height||34)),snS=Math.max(1,Math.min(100,S.settings.snow_fall!=null?+S.settings.snow_fall:Math.round((+S.settings.snow_speed||100)/10))),xmas=/^christmas/.test(cur),hallo=/^halloween/.test(cur),snR=Math.max(10,Math.min(100,+S.settings.mouse_radius||50)),batOn=UF().batsave!==false;
   /* snow settings are steppers (- value +) that walk through a ladder of sensible values */
   const stp=(key,lab,val)=>`<div class="field" style="margin-top:${key==="snow_height"?0:16}px"><label class="l">${lab}</label><div class="ramf stp"><button class="btn sm" data-sn="${key}" data-d="-1" aria-label="Decrease ${lab.toLowerCase()}">−</button><span class="rl" id="${key}_l" aria-live="polite">${val}</span><button class="btn sm" data-sn="${key}" data-d="1" aria-label="Increase ${lab.toLowerCase()}">+</button></div></div>`;
   /* single themes: [key,label,bg,card,line]; dual themes: one slot, left half = Light, right half = Dark */
-  const th=[[ "dark","Dark","#16181c","#26292f","#4a4f58"],["light","Light ☀","#f5f5f5","#ffffff","#2c2e31"],["oled","OLED ☾","#000","#16181c","#3a3f47"],["system","Sync with system","#000","#16181c","#3a3f47"],
+  const th=[[ "dark","Dark","#16181c","#26292f","#4a4f58"],["light","Light ☀","#f5f5f5","#ffffff","#2c2e31"],["oled","OLED ☾","#000","#16181c","#3a3f47"],["blackout","Black on black","#000","#000","#2c2e33"],["system","Sync with system","#000","#16181c","#3a3f47"],
     {n:"Christmas 🎄",l:["christmas-light","#f7f2e9","#ffffff","#c8222d"],d:["christmas-dark","#0d1a14","#15291f","#d6313d"]},
     {n:"Halloween 🎃",l:["halloween-light","#f6efe3","#fffaf2","#e8650a"],d:["halloween-dark","#120a1c","#1e1230","#ff7a18"]},
     ["glitch","Glitch","#05060a","#0c0e16","#00e5ff"],["synthwave","Synthwave","#140a2b","#1f1140","#ff2fb8"],["aurora","Aurora","#07131a","#0e2230","#2fe0a8"]];
@@ -2254,34 +2309,42 @@ function pAppearance(p){
   <div class="tgl" id="an" role="switch" tabindex="0" aria-checked="${animOn}">Theme animations: ${animOn?"On":"Off"}<span class="sw ${animOn?"on":""}"></span></div>
   <div class="tgl" id="bs" role="switch" tabindex="0" aria-checked="${batOn}">Pause animations on low battery<span class="sw ${batOn?"on":""}"></span></div>
   <div class="note" style="margin-top:7px">Saves power: effects stop while your laptop is unplugged at 50% or less.</div>
-  ${xmas?`<h3 style="margin-top:25px">Christmas snow</h3><div class="d">How deep the snow can pile up and how fast it falls. Cards and the tree hold less than the floor, and snow that gets too deep slides off by itself.</div>
-  ${stp("snow_height","Maximum snow height",snH+" px")}${stp("snow_speed","Snowfall speed",snS+"%")}
+  ${xmas||hallo?`<h3 style="margin-top:25px">Mouse radius</h3><div class="d">How far around your mouse snow is cleared (Christmas) or dust is pushed away (Halloween). Dragging uses a larger radius. 10% to 100%; 50% is the default.</div>
+  ${stp("mouse_radius","Radius",snR+"%")}`:""}
+  ${xmas?`<h3 style="margin-top:25px">Christmas snow</h3><div class="d">How deep the snow can pile up and how fast it falls (1% to 100%; 10% is the default). Cards and the tree hold less than the floor, and snow that gets too deep slides off by itself.</div>
+  ${stp("snow_height","Maximum snow height",snH+" px")}${stp("snow_fall","Snowfall speed",snS+"%")}
   <div class="gap"><button class="btn sm" id="snr">Reset snow</button></div>`:""}
   <h3 style="margin-top:25px">High contrast</h3><div class="d">Stronger text and borders and a clear focus outline, for easier reading.</div>
-  <div class="tgl" id="hc" role="switch" tabindex="0" aria-checked="${!!S.settings.high_contrast}">High contrast mode<span class="sw ${S.settings.high_contrast?"on":""}"></span></div>
+  <div class="tgl" id="hc" role="switch" tabindex="0" aria-checked="${S.settings.high_contrast!==false}">High contrast mode<span class="sw ${S.settings.high_contrast!==false?"on":""}"></span></div>
   <h3 style="margin-top:25px">Accent color</h3><div class="d">Used for buttons, highlights and links. "Theme default" keeps each theme's own colour. Text colors are adjusted to stay readable.</div>
-  <div class="swts" id="acs">${AC.map(([n,h])=>`<button class="swt ${(S.settings.accent||"")===h?"on":""}" data-ac="${h}" title="${n}" aria-label="${n}" style="background:${h||THEME_ACC[cur]||"#1bd96a"}"></button>`).join("")}<label class="swt cust ${S.settings.accent&&!AC.some(a=>a[1]===S.settings.accent)?"on":""}" title="Custom color"><input type="color" id="acc" aria-label="Custom accent color" value="${S.settings.accent||THEME_ACC[cur]||"#1bd96a"}"></label></div>
+  <div class="swts" id="acs">${AC.map(([n,h])=>`<button class="swt ${(S.settings.accent||"")===h?"on":""}" data-ac="${h}" title="${n}" aria-label="${n}" style="background:${h||THEME_ACC[cur]||"#1bd96a"}"></button>`).join("")}</div>
+  <div class="cacc"><span class="l">Custom color</span><input type="color" id="acc" aria-label="Pick a custom accent color" value="${/^#[0-9a-f]{6}$/i.test(S.settings.accent||"")?S.settings.accent:(/^#[0-9a-f]{6}$/i.test(THEME_ACC[cur]||"")?THEME_ACC[cur]:"#1bd96a")}"><input type="text" id="acx" maxlength="7" spellcheck="false" placeholder="#rrggbb" aria-label="Accent color as hex" value="${esc(S.settings.accent||"")}"><button class="btn sm" id="acap">Apply</button></div>
   <div class="note" style="margin-top:7px">${S.settings.accent?`Accent: ${esc(S.settings.accent)}`:"Accent: theme default"}</div>`;
   p.querySelectorAll("[data-th]").forEach(b=>b.onclick=async()=>{const t=b.dataset.th;S.settings.theme=t;applyTheme(t);FX.sync();S.settings=await api("/settings","POST",{theme:t});pAppearance(p)});
   const anT=async()=>{const v=S.settings.animations===false;S.settings.animations=v;applyLook();try{S.settings=await api("/settings","POST",{animations:v})}catch(e){toast(e.message,4000)}pAppearance(p)};
   $("#an").onclick=anT;$("#an").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();anT()}};
-  if(xmas){
-    const snUI=()=>{for(const key in SNL){const L=SNL[key],c=Math.max(L[0],Math.min(L[L.length-1],+S.settings[key]||SND[key]));
+  if(xmas||hallo){
+    const snS0=()=>S.settings.snow_fall!=null?+S.settings.snow_fall:Math.round((+S.settings.snow_speed||100)/10);
+    const snCur=key=>key==="snow_fall"?snS0():(+S.settings[key]||SND[key]);
+    const snUI=()=>{for(const key in SNL){if(!$("#"+key+"_l"))continue;const L=SNL[key],c=Math.max(L[0],Math.min(L[L.length-1],snCur(key)));
       $("#"+key+"_l").textContent=c+SNU[key];
       p.querySelector(`[data-sn="${key}"][data-d="-1"]`).disabled=c<=L[0];p.querySelector(`[data-sn="${key}"][data-d="1"]`).disabled=c>=L[L.length-1]}};
-    const snStep=async(key,d)=>{const L=SNL[key],c=+S.settings[key]||SND[key],v=d>0?L.find(x=>x>c):[...L].reverse().find(x=>x<c);if(v==null)return;
+    const snStep=async(key,d)=>{const L=SNL[key],c=snCur(key),v=d>0?L.find(x=>x>c):[...L].reverse().find(x=>x<c);if(v==null)return;
       S.settings[key]=v;FX.cfg();snUI();
       try{S.settings=await api("/settings","POST",{[key]:v})}catch(e){toast(e.message,4000)}FX.cfg();snUI()};
     p.querySelectorAll("[data-sn]").forEach(b=>b.onclick=()=>snStep(b.dataset.sn,+b.dataset.d));snUI();
-    $("#snr").onclick=async()=>{try{S.settings=await api("/settings","POST",{snow_height:34,snow_speed:100})}catch(e){toast(e.message,4000)}FX.cfg();pAppearance(p)};
+    if($("#snr"))$("#snr").onclick=async()=>{try{S.settings=await api("/settings","POST",{snow_height:34,snow_fall:10})}catch(e){toast(e.message,4000)}FX.cfg();pAppearance(p)};
   }
   const bsT=async()=>{await ufSet({batsave:!batOn});pAppearance(p)};
   $("#bs").onclick=bsT;$("#bs").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();bsT()}};
-  const hcT=async()=>{const v=!S.settings.high_contrast;S.settings.high_contrast=v;applyLook();try{S.settings=await api("/settings","POST",{high_contrast:v})}catch(e){toast(e.message,4000)}pAppearance(p)};
+  const hcT=async()=>{const v=S.settings.high_contrast===false;S.settings.high_contrast=v;applyLook();try{S.settings=await api("/settings","POST",{high_contrast:v})}catch(e){toast(e.message,4000)}pAppearance(p)};
   $("#hc").onclick=hcT;$("#hc").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();hcT()}};
   const setAcc=async hex=>{S.settings.accent=hex;applyAccent(hex);try{S.settings=await api("/settings","POST",{accent:hex})}catch(e){toast(e.message,4000)}pAppearance(p)};
   p.querySelectorAll("[data-ac]").forEach(b=>b.onclick=()=>setAcc(b.dataset.ac));
-  $("#acc").oninput=e=>applyAccent(e.target.value);$("#acc").onchange=e=>setAcc(e.target.value);
+  const hexOf=v=>{v=(v||"").trim().replace(/^#?/,"#").toLowerCase();if(/^#[0-9a-f]{3}$/.test(v))v="#"+v.slice(1).split("").map(c=>c+c).join("");return /^#[0-9a-f]{6}$/.test(v)?v:""};
+  $("#acc").oninput=e=>{applyAccent(e.target.value);$("#acx").value=e.target.value};$("#acc").onchange=e=>setAcc(e.target.value);
+  const applyHex=()=>{const h=hexOf($("#acx").value);if(!h){toast("Enter a color like #ff8800",3500);return}setAcc(h)};
+  $("#acap").onclick=applyHex;$("#acx").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();applyHex()}};
 }
 function pAccounts(p){
   const st=S.settings,M=st.ms_accounts||[];

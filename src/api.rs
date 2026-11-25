@@ -25,7 +25,7 @@ pub enum Out {
     Bytes(Vec<u8>, &'static str),
 }
 
-const THEMES: [&str; 11] = ["dark", "light", "oled", "system", "christmas-light", "christmas-dark", "halloween-light", "halloween-dark", "glitch", "synthwave", "aurora"];
+const THEMES: [&str; 12] = ["dark", "light", "oled", "blackout", "system", "christmas-light", "christmas-dark", "halloween-light", "halloween-dark", "glitch", "synthwave", "aurora"];
 const SHOT_TYPES: [(&str, &str); 4] = [("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("webp", "image/webp")];
 const SHOT_SKIP: [&str; 14] = ["saves", "mods", "libraries", "versions", "assets", "logs", "config", "resourcepacks", "shaderpacks", "datapacks", "natives", "runtime", "crash-reports", "bin"];
 
@@ -152,6 +152,8 @@ fn settings(r: &Req) -> Res {
         if let Some(a) = b["animations"].as_bool() { st.insert("animations".into(), json!(a)); } // theme animations on/off
         if let Some(n) = b["snow_height"].as_i64() { st.insert("snow_height".into(), json!(n.clamp(4, 100))); } // Christmas: max snow pile height (px)
         if let Some(o) = b["ui_flags"].as_object().filter(|o| serde_json::to_string(o).map(|t| t.len() <= 20000).unwrap_or(false)) { st.insert("ui_flags".into(), serde_json::Value::Object(o.clone())); } // small UI flags (tour seen, pinned instances, ...)
+        if let Some(n) = b["mouse_radius"].as_i64() { st.insert("mouse_radius".into(), json!(n.clamp(10, 100))); } // Christmas/Halloween: mouse radius (%)
+        if let Some(n) = b["snow_fall"].as_i64() { st.insert("snow_fall".into(), json!(n.clamp(1, 100))); } // Christmas: snowfall amount (1 to 100, 10 = default)
         if let Some(n) = b["snow_speed"].as_i64() { st.insert("snow_speed".into(), json!(n.clamp(10, 1000))); } // Christmas: snowfall speed (%)
         // minutes east of UTC, reported by the window; the daily server restart uses it to read the local clock
         if let Some(o) = b["tz_offset"].as_i64().filter(|o| (-840..=840).contains(o)) { st.insert("tz_offset".into(), json!(o)); }
@@ -252,10 +254,10 @@ fn settings(r: &Req) -> Res {
         "tl_dir": store::tl_root().to_string_lossy(), "tl_default": store::default_mc_dir().to_string_lossy(),
         "tl_is_default": g("tlauncher_dir").is_empty(), "is_default": g("instances_dir").is_empty(),
         "theme": st.get("theme").cloned().unwrap_or(json!("oled")), "moved": moved,
-        "accent": g("accent"), "high_contrast": st.get("high_contrast").and_then(|v| v.as_bool()).unwrap_or(false),
+        "accent": g("accent"), "high_contrast": st.get("high_contrast").and_then(|v| v.as_bool()).unwrap_or(true),
         "close_warning": store::close_warning(), "close_timer": store::close_timer(),
         "animations": st.get("animations").and_then(|v| v.as_bool()).unwrap_or(true),
-        "snow_height": store::snow_height(), "snow_speed": store::snow_speed(),
+        "snow_height": store::snow_height(), "snow_speed": store::snow_speed(), "snow_fall": store::snow_fall(), "mouse_radius": store::mouse_radius(),
         "ui_flags": st.get("ui_flags").cloned().unwrap_or(json!({})),
         "mr_dir": store::mr_root().to_string_lossy(), "mr_default": store::default_modrinth_dir().to_string_lossy(),
         "mr_is_default": g("modrinth_dir").is_empty(),
@@ -527,8 +529,26 @@ fn instance_detail(iid: &str) -> Res {
         let no_icon = m["icon_url"].as_str().map(|u| u.is_empty()).unwrap_or(true);
         m["icon_local"] = json!(no_icon && matches!(m["type"].as_str(), Some("mod") | Some("resourcepack") | Some("datapack")));
         m }).collect::<Vec<_>>());
-    d["modpack"] = inst.state.get("modpack").cloned().unwrap_or(Value::Null);
+    d["modpack"] = inst.state.get("modpack").cloned().map(|mut m| { if let Some(o) = m.as_object_mut() { o.remove("files"); } m }).unwrap_or(Value::Null);
     Ok(d)
+}
+
+fn s_(v: &Value) -> String { v.as_str().unwrap_or("").to_string() }
+
+/// Versions of the modpack this instance was installed from, with the installed one marked.
+fn modpack_versions(inst: &store::Instance) -> Res {
+    let mp = &inst.state["modpack"];
+    let pid = s_(&mp["project_id"]);
+    if pid.is_empty() { return Ok(json!({"linked": false, "versions": []})); }
+    use_key();
+    let vs = mods::pack_versions(&pid)?;
+    let cur_id = s_(&mp["version_id"]);
+    let cur_num = s_(&mp["version"]);
+    let vs: Vec<Value> = vs.into_iter().map(|mut v| {
+        let is_cur = if !cur_id.is_empty() { v["id"].as_str() == Some(cur_id.as_str()) } else { v["version_number"].as_str() == Some(cur_num.as_str()) };
+        v["current"] = json!(is_cur); v
+    }).collect();
+    Ok(json!({"linked": true, "title": mp["title"], "version": mp["version"], "versions": vs}))
 }
 
 fn set_installation(inst: &mut store::Instance, iid: &str, b: &Value) -> Res {
@@ -652,10 +672,10 @@ fn pack_job(task: &Option<String>, get_info: impl FnOnce(&Path) -> Result<mods::
 
 fn tmp_dir() -> PathBuf { std::env::temp_dir().join(format!("orbit-pack-{:08x}", rand::random::<u32>())) }
 
-fn install_modpack(task: &Option<String>, source: &str, ident: &str, mc: &str) -> Res {
+fn install_modpack(task: &Option<String>, source: &str, ident: &str, mc: &str, version_id: &str) -> Res {
     if source != "modrinth" { return Err("CurseForge modpacks aren't supported yet. Switch the source to Modrinth.".into()); }
-    let (ident, mc) = (ident.to_string(), mc.to_string());
-    pack_job(task, move |tmp| mods::fetch_modpack(&ident, tmp, if mc.is_empty() { None } else { Some(&mc) }), tmp_dir())
+    let (ident, mc, vid) = (ident.to_string(), mc.to_string(), version_id.to_string());
+    pack_job(task, move |tmp| if vid.is_empty() { mods::fetch_modpack(&ident, tmp, if mc.is_empty() { None } else { Some(&mc) }) } else { mods::fetch_pack_version(&ident, &vid, tmp) }, tmp_dir())
 }
 
 fn upload_modpack(task: &Option<String>, name: &str, data: &[u8]) -> Res {
@@ -670,7 +690,7 @@ fn upload_modpack(task: &Option<String>, name: &str, data: &[u8]) -> Res {
 
 fn create_from_project(task: &Option<String>, source: &str, ident: &str, ptype: &str) -> Res {
     if source != "modrinth" { return Err("Only Modrinth projects can start an instance for now.".into()); }
-    if ptype == "modpack" { return install_modpack(task, source, ident, ""); }
+    if ptype == "modpack" { return install_modpack(task, source, ident, "", ""); }
     use_key();
     let meta = mods::api_get(&format!("/project/{ident}"), &[])?;
     if meta.is_null() { return Err("That project wasn't found on Modrinth.".into()); }
@@ -886,6 +906,23 @@ fn instance_action(r: &Req, iid: &str, act: &str) -> Result<Out, String> {
             Some(rep) => { let mut v = crate::deps::report_json(&rep); v["supported"] = json!(true); v }
             None => json!({"supported": false}),
         })),
+        (_, "modpack-versions") => json_out(modpack_versions(&inst)),
+        (_, "modpack-switch") => {
+            if launcher::instance_busy(iid) { return Err("Close the game before changing the modpack version.".into()); }
+            let pid = s_(&inst.state["modpack"]["project_id"]);
+            if pid.is_empty() { return Err("This instance isn't linked to a Modrinth modpack.".into()); }
+            let vid = s(b, "version_id").to_string();
+            if vid.is_empty() { return Err("Pick a version.".into()); }
+            let tmp = tmp_dir();
+            let _ = std::fs::create_dir_all(&tmp);
+            let (log, err) = run_job(&r.task, |log| {
+                let info = mods::fetch_pack_version(&pid, &vid, &tmp)?;
+                mods::switch_modpack(&mut inst, &info, log)
+            });
+            let _ = std::fs::remove_dir_all(&tmp);
+            if let Some(e) = err { return Err(e); }
+            let mut d = instance_detail(iid)?; d["log"] = json!(log); Ok(Out::Json(d))
+        }
         (_, "installation") => json_out(set_installation(&mut inst, iid, b)),
         (_, "repair") => {
             let _ = std::fs::remove_file(launcher::profile_path(&store::meta_dir(), &inst));
@@ -1049,7 +1086,7 @@ pub fn route(r: &Req) -> Result<Out, String> {
         "/api/auth/begin" if m == "POST" => return j(if auth::MS_LOGIN_DISABLED { Err("Microsoft sign-in is temporarily disabled.".into()) } else { auth::begin() }),
         "/api/auth/status" => return j(Ok(auth::status())),
         "/api/auth/cancel" if m == "POST" => { auth::cancel(); return j(Ok(json!({"ok": true}))); }
-        "/api/modpack/install" if m == "POST" => return j(install_modpack(&r.task, if s(b, "source").is_empty() { "modrinth" } else { s(b, "source") }, s(b, "ident"), s(b, "mc"))),
+        "/api/modpack/install" if m == "POST" => return j(install_modpack(&r.task, if s(b, "source").is_empty() { "modrinth" } else { s(b, "source") }, s(b, "ident"), s(b, "mc"), s(b, "version_id"))),
         "/api/import/scan" => return j(import_scan(qs("launcher"))),
         "/api/import/inspect" => {
             let pth = Path::new(qs("path"));
