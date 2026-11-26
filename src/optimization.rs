@@ -1,16 +1,16 @@
-//! "Add Optimization" for the Custom setup flow (Fabric and NeoForge).
+//! "Add Optimization" for the Custom setup flow (Fabric, NeoForge, Quilt and Forge).
 //!
-//! Nothing here names a mod or a project id. The two reference packs in assets/optimization/ are only
-//! read for the game version each loader's optimization set targets (`dependencies.minecraft` in
-//! their modrinth.index.json). That version is the ceiling: the option works for exactly that version
-//! and is refused for any other. Which mods get installed is decided live, per instance, from Modrinth:
+//! The text lists in assets/optimization/ (one per loader) define the set. A list's game version (Fabric and NeoForge)
+//! is the ceiling: the option works up to that version and is refused above it. For each mod in the list:
 //!
-//!   1. search the "optimization" category for this loader + game version, most downloaded first;
-//!   2. per candidate, ask Modrinth for a real build for this exact version + loader, and check that
-//!      every *required* dependency has one too (so a mod is never installed half-working);
+//!   1. check the project exists on Modrinth (by project id, or slug for Forge); if not, skip it;
+//!   2. ask Modrinth for its builds for this instance's exact game version and loader (Quilt also accepts Fabric
+//!      builds), and take the newest release, falling back to the newest beta/alpha only if there is no release;
+//!      a mod with no such build is skipped, and so is one whose required dependencies have none;
 //!   3. drop candidates that declare themselves incompatible with one already chosen;
 //!   4. install through the normal installer (hash-checked downloads, dependency handling);
-//!   5. scan the jars that landed and remove any of ours the jar metadata says can't run here.
+//!   5. scan the jars that landed and remove any of ours that conflict with another or are for the wrong loader
+//!      (a jar whose metadata names an older patch release is kept and only reported: Modrinth listed it for this version).
 //!
 //! Applying is best effort: the instance always exists afterwards, and problems come back as data
 //! (`error`, `skipped`, `warnings`) for the UI instead of failing the whole creation.
@@ -21,23 +21,37 @@ use crate::store::Instance;
 use crate::util::{track_expected, Res};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::Read;
 use std::sync::{Mutex, OnceLock};
 
 /// Loaders the option supports.
-pub const SUPPORTED: [&str; 2] = ["fabric", "neoforge"];
-/// Modrinth's own category for performance mods; a category name, not a project.
-const CATEGORY: &str = "optimization";
-/// How many search hits to consider. More than we install, because some get rejected.
-const CANDIDATES: usize = 40;
-/// Upper bound on how many top-level optimization mods one instance gets.
-const MAX_MODS: usize = 14;
+pub const SUPPORTED: [&str; 4] = ["fabric", "neoforge", "quilt", "forge"];
 
-/// The packs the ceilings are read from. Embedded, so the app never needs them on disk.
-static REFERENCE_PACKS: [&[u8]; 2] = [
-    include_bytes!("../assets/optimization/Just_Optimized_FABRIC.mrpack"),
-    include_bytes!("../assets/optimization/Just_Optimized_NEOFORGE.mrpack"),
+/// Loader builds an instance of `loader` can run, best match first. Quilt loads Fabric mods, so a mod with no
+/// Quilt-tagged build but a Fabric one is fine there.
+fn runs(loader: &str) -> &'static [&'static str] {
+    match loader { "quilt" => &["quilt", "fabric"], "fabric" => &["fabric"], "forge" => &["forge"], "neoforge" => &["neoforge"], _ => &[] }
+}
+
+/// The packs the ceilings are read from: plain text lists, embedded so the app never needs them on disk.
+/// Format: `key = value` header lines (minecraft, <loader> = <loader version>), then a `[mods]`
+/// section with one mod name per line. `#` starts a comment.
+static REFERENCE_PACKS: [&str; 4] = [
+    include_str!("../assets/optimization/Just_Optimized_FABRIC.txt"),
+    include_str!("../assets/optimization/Just_Optimized_NEOFORGE.txt"),
+    include_str!("../assets/optimization/Just_Optimized_QUILT.txt"),
+    include_str!("../assets/optimization/Just_Optimized_FORGE.txt"),
 ];
+
+/// Parse a mod list into `dependencies` (the loader and game version header lines) and `mods` (the names).
+fn parse_pack(txt: &str) -> Value {
+    let (mut deps, mut mods, mut in_mods) = (serde_json::Map::new(), Vec::new(), false);
+    for line in txt.trim_start_matches('\u{feff}').lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+        if line.eq_ignore_ascii_case("[mods]") { in_mods = true; continue; }
+        if in_mods { mods.push(json!(line)); }
+        else if let Some((k, v)) = line.split_once('=') { deps.insert(k.trim().to_string(), json!(v.trim())); }
+    }
+    json!({"dependencies": deps, "mods": mods})
+}
 
 fn parse_ver(v: &str) -> Option<Vec<u64>> { v.split('.').map(|p| p.parse().ok()).collect() }
 
@@ -52,12 +66,13 @@ fn index_target(idx: &Value) -> Option<(String, String)> {
     Some((loader.to_string(), d.get("minecraft")?.as_str()?.to_string()))
 }
 
-fn pack_target(bytes: &[u8]) -> Option<(String, String)> {
-    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).ok()?;
-    let mut s = String::new();
-    z.by_name("modrinth.index.json").ok()?.read_to_string(&mut s).ok()?;
-    index_target(&serde_json::from_str(s.trim_start_matches('\u{feff}')).ok()?)
+/// The loader a parsed list is for (from its loader header line).
+fn pack_loader_of(idx: &Value) -> Option<&'static str> {
+    let d = idx["dependencies"].as_object()?;
+    mods::MRPACK_LOADERS.iter().find(|(k, _)| d.contains_key(*k)).map(|(_, l)| *l)
 }
+
+fn pack_target(txt: &str) -> Option<(String, String)> { index_target(&parse_pack(txt)) }
 
 /// loader -> highest game version any reference pack declares for it.
 fn pack_ceilings() -> &'static BTreeMap<String, String> {
@@ -84,7 +99,7 @@ pub fn ceilings(newest_supported: impl Fn(&str) -> Option<String>) -> BTreeMap<S
 /// ceiling version and every release version below it; whether a given mod exists for that version is
 /// decided per mod when resolving, never assumed here.
 pub fn check(loader: &str, mc: &str, ceilings: &BTreeMap<String, String>) -> Result<(), String> {
-    if !SUPPORTED.contains(&loader) { return Err("Add Optimization works with Fabric and NeoForge instances.".into()); }
+    if !SUPPORTED.contains(&loader) { return Err("Add Optimization works with Fabric, NeoForge, Quilt and Forge instances.".into()); }
     let name = crate::meta::label(loader);
     match ceilings.get(loader) {
         None => Err(format!("Add Optimization has no target game version for {name}.")),
@@ -99,7 +114,7 @@ pub fn check(loader: &str, mc: &str, ceilings: &BTreeMap<String, String>) -> Res
 // ---------------------------------------------------------------- resolving
 
 #[derive(Clone, Debug)]
-struct Candidate { pid: String, title: String, incompatible: HashSet<String>, required: HashSet<String> }
+struct Candidate { pid: String, title: String, incompatible: HashSet<String>, required: HashSet<String>, pinned: Option<Value> }
 
 enum Reject { Skip(String), Net(String) }
 
@@ -128,7 +143,7 @@ fn has_build(pid: &str, mc: &str, loader: &str, memo: &Mutex<HashMap<String, Res
 
 /// Don't trust the query filter alone: the version must list this game version and loader itself.
 fn fits(v: &Value, mc: &str, loader: &str) -> bool {
-    str_list(v, "game_versions").iter().any(|g| g == mc) && str_list(v, "loaders").iter().any(|l| l == loader)
+    str_list(v, "game_versions").iter().any(|g| g == mc) && str_list(v, "loaders").iter().any(|l| runs(loader).contains(&l.as_str()))
 }
 
 fn evaluate(hit: &Value, mc: &str, loader: &str, memo: &Mutex<HashMap<String, Result<bool, String>>>) -> Result<Candidate, Reject> {
@@ -155,7 +170,7 @@ fn evaluate(hit: &Value, mc: &str, loader: &str, memo: &Mutex<HashMap<String, Re
             _ => {}
         }
     }
-    Ok(Candidate { pid, title, incompatible, required })
+    Ok(Candidate { pid, title, incompatible, required, pinned: None })
 }
 
 /// Walk candidates best-first, keep those that don't clash with what is already kept. Pure, so it is testable.
@@ -174,31 +189,85 @@ fn select(ranked: Vec<Candidate>, max: usize) -> (Vec<Candidate>, Vec<(String, S
 
 struct Plan { picks: Vec<Candidate>, skipped: Vec<(String, String)> }
 
+/// The parsed list for this loader, if there is one.
+fn reference_pack(loader: &str) -> Option<Value> {
+    REFERENCE_PACKS.iter().map(|b| parse_pack(b)).find(|idx| pack_loader_of(idx) == Some(loader))
+}
+
+/// Lower-case letters and digits only, so "Mod Menu", "mod-menu" and "modmenu" compare equal.
+fn norm(s: &str) -> String { s.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect() }
+
+/// Likely Modrinth slugs for a mod name: hyphenated, run together, and each with the loader appended.
+fn slug_forms(name: &str, loader: &str) -> Vec<String> {
+    let lower = name.to_lowercase();
+    let hy = lower.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join("-");
+    let joined = norm(name);
+    let mut out = vec![hy.clone(), joined.clone()];
+    for l in runs(loader) { out.push(format!("{hy}-{l}")); out.push(format!("{joined}-{l}")); }
+    out.dedup();
+    out
+}
+
 fn resolve(mc: &str, loader: &str) -> Result<Plan, String> {
-    let facets = json!([["project_type:mod"], ["categories!=datapack"], [format!("categories:{CATEGORY}")], [format!("categories:{loader}")], [format!("versions:{mc}")]]);
-    let res = api_get("/search", &[("facets", facets.to_string()), ("limit", CANDIDATES.to_string()), ("index", "downloads".into())])
-        .map_err(|e| if is_net(&e) { OFFLINE.to_string() } else { format!("Couldn't look up optimization mods ({e}).") })?;
-    let hits: Vec<Value> = res["hits"].as_array().cloned().unwrap_or_default();
-    if hits.is_empty() {
-        return Err(format!("Modrinth lists no optimization mods for {} {mc} yet.", crate::meta::label(loader)));
+    let net = |e: String| if is_net(&e) { OFFLINE.to_string() } else { format!("Couldn't look up optimization mods ({e}).") };
+    let mut skipped: Vec<(String, String)> = vec![];
+    let pack = reference_pack(loader).unwrap_or(Value::Null);
+    let (mut names, mut seen_n): (Vec<String>, HashSet<String>) = (vec![], HashSet::new());
+    for n in str_list(&pack, "mods") { if seen_n.insert(norm(&n)) { names.push(n); } }
+    if names.is_empty() { return Err(format!("There is no optimization list for {}.", crate::meta::label(loader))); }
+    // 1. does each mod exist on Modrinth? First by likely slugs (one batched request), then by searching its name.
+    let mut by_slug: HashMap<String, Value> = HashMap::new();
+    let cands: Vec<Vec<String>> = names.iter().map(|n| slug_forms(n, loader)).collect();
+    let all: Vec<String> = { let mut u: Vec<String> = cands.iter().flatten().cloned().collect(); u.sort(); u.dedup(); u };
+    for chunk in all.chunks(100) {
+        let ids = serde_json::to_string(chunk).unwrap_or_default();
+        for p in api_get("/projects", &[("ids", ids)]).map_err(net)?.as_array().into_iter().flatten() {
+            if let Some(sl) = p["slug"].as_str() { by_slug.insert(sl.to_lowercase(), p.clone()); }
+        }
     }
+    let direct: Vec<Option<Value>> = cands.iter().map(|c| c.iter().find_map(|sl| by_slug.get(sl).cloned())).collect();
+    let missing: Vec<(usize, &String)> = names.iter().enumerate().filter(|(i, _)| direct[*i].is_none()).collect();
+    let searched = mods::par_map(&missing, 6, |(_, n)| -> Result<Option<Value>, String> {
+        let res = api_get("/search", &[("query", n.to_string()), ("limit", "10".into()), ("facets", "[[\"project_type:mod\"]]".into())])?;
+        let want = norm(n);
+        Ok(res["hits"].as_array().into_iter().flatten()
+            .find(|h| h["slug"].as_str().map(norm).as_deref() == Some(want.as_str()) || h["title"].as_str().map(norm).as_deref() == Some(want.as_str()))
+            .map(|h| json!({"id": h["project_id"], "slug": h["slug"], "title": h["title"], "client_side": h["client_side"]})))
+    });
+    let mut from_search: HashMap<usize, Value> = HashMap::new();
+    for ((i, _), r) in missing.iter().zip(searched) { if let Some(p) = r.map_err(net)? { from_search.insert(*i, p); } }
+    let (mut order, mut projects): (Vec<(String, Value)>, HashMap<String, Value>) = (vec![], HashMap::new());
+    for (i, n) in names.iter().enumerate() {
+        match direct[i].clone().or_else(|| from_search.remove(&i)).and_then(|p| p["id"].as_str().map(|id| (id.to_string(), p.clone()))) {
+            Some((id, p)) => { if projects.insert(id.clone(), p).is_none() { order.push((id, Value::Null)); } }
+            None => skipped.push((n.clone(), "isn't on Modrinth".into())),
+        }
+    }
+    // 2. for each mod that exists, evaluate() asks Modrinth for its builds for this exact game version and loader
+    //    and takes the newest release (see mods::best_version); no such build means the mod is skipped
     let memo = Mutex::new(HashMap::new());
-    let results = mods::par_map(&hits, 6, |h| evaluate(h, mc, loader, &memo));
-    let (mut ranked, mut skipped, mut net_err) = (vec![], vec![], None);
-    for (h, r) in hits.iter().zip(results) {
+    let results = mods::par_map(&order, 6, |(pid, ver)| {
+        let proj = projects.get(pid).cloned().unwrap_or(json!({}));
+        let title = proj["title"].as_str().unwrap_or("A mod").to_string();
+        if proj["client_side"] == "unsupported" { return Err(Reject::Skip("server-only, nothing to do on a client".into())); }
+        let _ = (&ver, &title);
+        evaluate(&json!({"project_id": pid, "title": title, "client_side": proj["client_side"]}), mc, loader, &memo)
+    });
+    let (mut ranked, mut net_err) = (vec![], None);
+    for ((pid, _), r) in order.iter().zip(results) {
         match r {
             Ok(c) => ranked.push(c),
-            Err(Reject::Skip(why)) => skipped.push((h["title"].as_str().unwrap_or("A mod").to_string(), why)),
+            Err(Reject::Skip(why)) => skipped.push((projects.get(pid).and_then(|p| p["title"].as_str()).unwrap_or("A mod").to_string(), why)),
             Err(Reject::Net(e)) => { net_err.get_or_insert(e); }
         }
     }
     if ranked.is_empty() {
         return Err(match net_err {
             Some(_) => OFFLINE.to_string(),
-            None => format!("None of the optimization mods on Modrinth have a compatible {} {mc} build.", crate::meta::label(loader)),
+            None => format!("None of the optimization mods have a compatible {} {mc} build.", crate::meta::label(loader)),
         });
     }
-    let (picks, clashed) = select(ranked, MAX_MODS);
+    let (picks, clashed) = select(ranked, usize::MAX);
     skipped.extend(clashed);
     Ok(Plan { picks, skipped })
 }
@@ -220,7 +289,7 @@ fn remove_installed(inst: &mut Instance, pid: &str) {
     if let Some(m) = inst.mods_mut().remove(pid) { let _ = std::fs::remove_file(mods::content_path(inst, &m)); }
 }
 
-/// Install the resolved optimization set into `inst` (a Fabric or NeoForge instance already at the ceiling
+/// Install the resolved optimization set into `inst` (an instance on a supported loader at or below the ceiling
 /// version). Never fails: the returned object says what happened.
 pub fn apply(inst: &mut Instance, log: &mut Log) -> Value {
     let (mc, loader) = (inst.mc(), inst.loader());
@@ -233,7 +302,7 @@ pub fn apply(inst: &mut Instance, log: &mut Log) -> Value {
 
     for c in &plan.picks {
         let before: HashSet<String> = inst.mods().keys().cloned().collect();
-        let r = mods::install_project(inst, &c.pid, true, &mut seen, "mod", log);
+        let r = mods::install_project_with(inst, &c.pid, c.pinned.as_ref(), true, &mut seen, "mod", log);
         let fresh: HashSet<String> = inst.mods().keys().filter(|k| !before.contains(*k) && **k != c.pid).cloned().collect();
         match r {
             Ok(()) if inst.mods().contains_key(&c.pid) => {
@@ -264,7 +333,8 @@ pub fn apply(inst: &mut Instance, log: &mut Log) -> Value {
         for (a, b, why) in &rep.conflicts {
             if let Some(i) = [pos(a), pos(b)].into_iter().flatten().max() { victims.push((i, why.clone())); }
         }
-        for (f, range) in &rep.mc_mismatch { if let Some(i) = pos(f) { victims.push((i, format!("built for Minecraft {range}, not {mc}"))); } }
+        // Modrinth already lists these for this exact game version, so a jar whose own metadata names an older patch release is kept and only reported
+        for (f, range) in &rep.mc_mismatch { warnings.push(format!("{f} declares Minecraft {range}; kept because Modrinth lists it for {mc}.")); }
         for (f, _) in &rep.wrong_loader { if let Some(i) = pos(f) { victims.push((i, format!("isn't a {} mod", crate::meta::label(&loader)))); } }
         victims.sort_by_key(|v| v.0);
         victims.dedup_by_key(|v| v.0);
@@ -298,7 +368,7 @@ pub fn apply(inst: &mut Instance, log: &mut Log) -> Value {
 mod tests {
     use super::*;
 
-    fn cand(pid: &str, inc: &[&str]) -> Candidate { Candidate { pid: pid.into(), title: pid.to_uppercase(), incompatible: inc.iter().map(|s| s.to_string()).collect(), required: HashSet::new() } }
+    fn cand(pid: &str, inc: &[&str]) -> Candidate { Candidate { pid: pid.into(), title: pid.to_uppercase(), incompatible: inc.iter().map(|s| s.to_string()).collect(), required: HashSet::new(), pinned: None } }
 
     #[test]
     fn ceilings_come_from_the_reference_packs() {
@@ -324,7 +394,18 @@ mod tests {
         assert!(check("fabric", "26.4", &c).is_err());
         assert!(check("fabric", "24w10a", &c).is_err());       // snapshots
         assert!(check("neoforge", "1.21.1-pre1", &c).is_err());
-        assert!(check("forge", "1.21.1", &c).is_err());
+        assert!(check("forge", "1.21.1", &c).is_err());        // no fixed target for Forge and no fallback given here: no ceiling
+        let c2 = ceilings(|l| Some(if l == "forge" { "1.20.1".to_string() } else { "1.21.1".to_string() }));
+        assert!(check("forge", "1.20.1", &c2).is_ok());
+        assert!(check("forge", "1.21.1", &c2).is_err());
+        assert!(check("quilt", "1.21.1", &c2).is_ok());
+        assert_eq!(runs("quilt"), ["quilt", "fabric"]);
+        assert_eq!(pack_loader_of(&parse_pack(REFERENCE_PACKS[2])), Some("quilt"));
+        assert!(!str_list(&reference_pack("quilt").unwrap(), "mods").is_empty());
+        assert!(str_list(&reference_pack("forge").unwrap(), "mods").contains(&"Embeddium".to_string()));
+        assert!(pack_target(REFERENCE_PACKS[2]).is_none() && pack_target(REFERENCE_PACKS[3]).is_none()); // no fixed ceiling
+        assert_eq!(norm("Mod Menu"), norm("mod-menu"));
+        assert!(slug_forms("Mod Menu", "fabric").contains(&"modmenu".to_string()) && slug_forms("Sodium", "quilt").contains(&"sodium-fabric".to_string()));
         assert!(check("vanilla", "26.3", &c).is_err());
     }
 

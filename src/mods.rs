@@ -68,11 +68,20 @@ fn dup_elsewhere(inst: &Instance, key: &str, slug: &str) -> Option<Value> {
 // ---------- Modrinth ----------
 
 pub fn best_version(project: &str, mc: &str, loader: Option<&str>) -> Res<Option<Value>> {
-    let mut p = vec![("game_versions", jl(&[mc]))];
-    if let Some(l) = loader { p.push(("loaders", jl(&[l]))); }
-    let v = api_get(&format!("/project/{project}/version"), &p)?;
-    let Some(arr) = v.as_array().filter(|a| !a.is_empty()) else { return Ok(None) };
-    Ok(Some(arr.iter().find(|x| x["version_type"] == "release").unwrap_or(&arr[0]).clone()))
+    let one = |l: Option<&str>| -> Res<Option<Value>> {
+        let mut p = vec![("game_versions", jl(&[mc]))];
+        if let Some(l) = l { p.push(("loaders", jl(&[l]))); }
+        let v = api_get(&format!("/project/{project}/version"), &p)?;
+        let Some(arr) = v.as_array().filter(|a| !a.is_empty()) else { return Ok(None) };
+        // newest first (don't rely on the API's order), then the newest release, else the newest of any type
+        let mut arr = arr.clone();
+        arr.sort_by(|a, b| b["date_published"].as_str().unwrap_or("").cmp(a["date_published"].as_str().unwrap_or("")));
+        Ok(Some(arr.iter().find(|x| x["version_type"] == "release").unwrap_or(&arr[0]).clone()))
+    };
+    let r = one(loader)?;
+    // Quilt loads Fabric mods, and most mods are only tagged Fabric on Modrinth
+    if r.is_none() && loader == Some("quilt") { return one(Some("fabric")); }
+    Ok(r)
 }
 
 fn primary_file(v: &Value) -> Option<&Value> {
@@ -81,6 +90,12 @@ fn primary_file(v: &Value) -> Option<&Value> {
 }
 
 pub fn install_project(inst: &mut Instance, project: &str, explicit: bool, seen: &mut HashSet<String>, ptype: &str, log: &mut Log) -> Res<()> {
+    install_project_with(inst, project, None, explicit, seen, ptype, log)
+}
+
+/// Like `install_project`, but `forced` installs that exact Modrinth version instead of the newest compatible one
+/// (used when a curated list, such as the optimization pack, names the builds it was tested with).
+pub fn install_project_with(inst: &mut Instance, project: &str, forced: Option<&Value>, explicit: bool, seen: &mut HashSet<String>, ptype: &str, log: &mut Log) -> Res<()> {
     let cfg = inst.cfg()?.clone();
     let meta = api_get(&format!("/project/{project}"), &[])?;
     if meta.is_null() { log.push(format!("! project '{project}' not found on Modrinth")); return Ok(()); }
@@ -92,7 +107,8 @@ pub fn install_project(inst: &mut Instance, project: &str, explicit: bool, seen:
         return Ok(());
     }
     let loader = (ptype == "mod").then(|| st(&cfg, "loader")).filter(|l| l != "vanilla");
-    let Some(version) = best_version(&pid, &st(&cfg, "mc"), loader.as_deref())? else {
+    let found = match forced { Some(v) => Some(v.clone()), None => best_version(&pid, &st(&cfg, "mc"), loader.as_deref())? };
+    let Some(version) = found else {
         log.push(format!("! {title}: no version for {} / {}", st(&cfg, "mc"), st(&cfg, "loader")));
         return Ok(());
     };
@@ -588,7 +604,10 @@ pub fn check_updates(inst: &Instance) -> Vec<Value> {
             }
         } else {
             let v = best_version(key, &mc, ld.as_deref()).ok()??;
-            if v["id"] != m["version_id"] { return Some(json!({"key": key, "new_id": v["id"], "new": v["version_number"]})); }
+            if v["id"] != m["version_id"] {
+                let cl: String = v["changelog"].as_str().unwrap_or("").chars().take(1500).collect();
+                return Some(json!({"key": key, "new_id": v["id"], "new": v["version_number"], "changelog": cl}));
+            }
         }
         None
     });

@@ -105,12 +105,14 @@ current theme (7:1 in high contrast). Stored as the `accent` and `high_contrast`
 Tick **Add Optimization** when creating a Fabric or NeoForge instance and Orbit adds performance mods after creating it.
 
 - **Target version and older.** Per loader, the ceiling is the `dependencies.minecraft` declared in the reference packs in
-  `assets/optimization/*.mrpack` (embedded at build time; only that field is read). The option works for that release version and
+  `assets/optimization/*.txt` (plain-text mod lists for Fabric, NeoForge, Quilt and Forge, embedded at build time; the game version, loader and each mod's name are read; Quilt and Forge declare no version, so their ceiling is the newest version the loader supports). The option works for that release version and
   any release below it, and the API enforces this too. A mod is added only if Modrinth has a build for that exact version and
   loader; otherwise it is skipped together with any libraries that were only needed for it.
-- **No mod list.** Mods are found per instance: Modrinth search in the `optimization` category for the loader + game version,
-  a real build (and builds of all required dependencies) checked for each hit, mutually `incompatible` mods dropped, then installed
-  with the normal hash-checked installer. Jars that the final scan says can't run here are removed.
+- **Per-mod lookup.** Each mod name in the loader's text list is looked up on Modrinth (by slug, then by search; it must exist), then Modrinth is asked for
+  its builds for the instance's exact game version and loader (Quilt also accepts Fabric builds). The newest release is used
+  (the newest beta/alpha only if no release exists); a mod with no such build, or whose required dependencies have none, is
+  skipped. Mutually `incompatible` mods are dropped, the rest are installed with the normal hash-checked installer, and jars
+  that the final scan says can't run here are removed.
 - **Never blocks creation.** The instance is always created; if Modrinth is unreachable or nothing fits, the reply's
   `optimization` object carries `error`, `skipped` and `warnings`, and the UI shows them.
 

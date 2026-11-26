@@ -52,6 +52,8 @@ pub fn sha1_file(p: &Path) -> Res<String> { hash_file(p, "sha1") }
 pub struct Track {
     pub expected: usize, pub started: usize, pub done: usize,
     pub cur: u64, pub cur_total: u64, pub label: String,
+    /// Set by the Cancel button in the downloads panel; downloads stop at the next chunk.
+    pub cancel: bool,
 }
 
 impl Track {
@@ -78,6 +80,7 @@ pub fn download_file(url: &str, dir: &Path, filename: &str, algo: Option<&str>, 
     let dest = dir.join(&filename);
     let tmp = dir.join(format!("{filename}.part"));
     let tr = track();
+    if tr.as_ref().map(|t| t.lock().unwrap().cancel).unwrap_or(false) { return Err("Cancelled.".into()); }
     if let Some(t) = &tr { let mut t = t.lock().unwrap(); t.started += 1; t.label = filename.clone(); t.cur = 0; t.cur_total = 0; }
     let fail = |m: String| { let _ = std::fs::remove_file(&tmp); Err(m) };
     let resp = match agent(120).get(url).call() { Ok(r) => r, Err(e) => return fail(format!("Download failed for {filename}: {}", http_err(url, e))) };
@@ -89,6 +92,7 @@ pub fn download_file(url: &str, dir: &Path, filename: &str, algo: Option<&str>, 
     loop {
         let n = match rd.read(&mut buf) { Ok(n) => n, Err(e) => return fail(format!("Download failed for {filename}: {e}")) };
         if n == 0 { break; }
+        if tr.as_ref().map(|t| t.lock().unwrap().cancel).unwrap_or(false) { return fail("Cancelled.".into()); }
         match algo { Some("sha1") => h1.update(&buf[..n]), Some("sha256") => h256.update(&buf[..n]), Some(_) => h512.update(&buf[..n]), None => {} }
         if let Err(e) = out.write_all(&buf[..n]) { return fail(format!("Download failed for {filename}: {e}")); }
         if let Some(t) = &tr { t.lock().unwrap().cur += n as u64; }

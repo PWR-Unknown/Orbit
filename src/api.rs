@@ -74,11 +74,23 @@ static LVCACHE: Mutex<Vec<((String, String), Instant, Value)>> = Mutex::new(Vec:
 static TCACHE: Mutex<Vec<(String, Value)>> = Mutex::new(Vec::new());
 static JOB_LOCK: Mutex<()> = Mutex::new(());
 static PROGRESS: Mutex<Vec<(String, SharedTrack)>> = Mutex::new(Vec::new());
+/// Tasks cancelled before they got to run (they were queued behind another job).
+static CANCELLED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// Cancel a running or queued install: the running job's downloads stop at their next chunk.
+fn cancel_task(id: &str) {
+    let t = PROGRESS.lock().unwrap_or_else(|e| e.into_inner()).iter().rev().find(|(k, _)| k == id).map(|(_, t)| t.clone());
+    match t { Some(t) => t.lock().unwrap().cancel = true, None => CANCELLED.lock().unwrap_or_else(|e| e.into_inner()).push(id.to_string()) }
+}
 
 /// Run `f` as the one active job, capturing readable progress lines. Errors become the last log line
 /// (and are also returned) so the UI shows them like the Python version did.
 pub fn run_job<F: FnOnce(&mut Log) -> Result<(), String>>(task: &Option<String>, f: F) -> (Log, Option<String>) {
     let _g = JOB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(t) = task {
+        let mut c = CANCELLED.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(i) = c.iter().position(|x| x == t) { c.remove(i); return (vec!["Cancelled.".into()], Some("Cancelled.".into())); }
+    }
     use_key();
     let tr: SharedTrack = Arc::new(Mutex::new(Track { expected: 1, ..Default::default() }));
     crate::util::set_track(Some(tr.clone()));
@@ -660,7 +672,9 @@ fn pack_job(task: &Option<String>, get_info: impl FnOnce(&Path) -> Result<mods::
         let info = get_info(&tmp)?;
         let mut inst = create_instance_raw(&info.title, &info.mc, &info.loader, &info.loader_version)?;
         created = Some(inst.id());
-        mods::apply_modpack(&mut inst, &info, log)
+        mods::apply_modpack(&mut inst, &info, log)?;
+        let _ = mods::ensure_deps(&mut inst, log);   // libraries the jars need are added now, not when the player later clicks "Install missing dependencies"
+        inst.save()
     });
     let _ = std::fs::remove_dir_all(&tmp);
     if let Some(e) = err {
@@ -710,7 +724,7 @@ fn create_from_project(task: &Option<String>, source: &str, ident: &str, ptype: 
     let mut inst = create_instance_raw(&title, &mc, loader, "")?;
     let iid = inst.id();
     let (pid, ptype2) = (s(&meta, "id").to_string(), ptype.to_string());
-    let (log, _) = run_job(task, |log| mods::install_mod(&mut inst, "modrinth", &pid, true, &ptype2, log).and_then(|_| inst.save()));
+    let (log, _) = run_job(task, |log| { mods::install_mod(&mut inst, "modrinth", &pid, true, &ptype2, log)?; let _ = mods::ensure_deps(&mut inst, log); inst.save() });
     if store::load_inst(&iid)?.mods().is_empty() {
         let _ = std::fs::remove_dir_all(store::inst_dir().join(&iid));
         return Err(if log.is_empty() { format!("Couldn't install {title}.") } else { log.join(" ") });
@@ -917,7 +931,9 @@ fn instance_action(r: &Req, iid: &str, act: &str) -> Result<Out, String> {
             let _ = std::fs::create_dir_all(&tmp);
             let (log, err) = run_job(&r.task, |log| {
                 let info = mods::fetch_pack_version(&pid, &vid, &tmp)?;
-                mods::switch_modpack(&mut inst, &info, log)
+                mods::switch_modpack(&mut inst, &info, log)?;
+                let _ = mods::ensure_deps(&mut inst, log);
+                inst.save()
             });
             let _ = std::fs::remove_dir_all(&tmp);
             if let Some(e) = err { return Err(e); }
@@ -1117,6 +1133,7 @@ pub fn route(r: &Req) -> Result<Out, String> {
             let t = PROGRESS.lock().unwrap().iter().rev().find(|(k, _)| k == qs("id")).map(|(_, t)| t.clone());
             return j(Ok(t.map(|t| t.lock().unwrap().snapshot()).unwrap_or(json!({"pct": null}))));
         }
+        "/api/task/cancel" if m == "POST" => { cancel_task(s(b, "task")); return j(Ok(json!({"ok": true}))); }
         "/api/tasks" => return j(tasks(r)),
         "/api/open-url" if m == "POST" => {
             let u = s(b, "url");

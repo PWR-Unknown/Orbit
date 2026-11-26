@@ -62,8 +62,10 @@ pub fn merge(vanilla: &Value, md: &Value, name: &str) -> Res {
 // ---------- Fabric / Quilt ----------
 
 fn meta_list(loader: &str, mc: &str) -> Res<Vec<Value>> {
-    let v = get_json(&format!("{}/{mc}", meta_url(loader).unwrap()))?;
-    match v.as_array() { Some(a) if !a.is_empty() => Ok(a.clone()), _ => Err(format!("{} has no loader for Minecraft {mc}.", label(loader))) }
+    let none = || format!("{} isn't available for Minecraft {mc}.", label(loader));
+    // Fabric/Quilt meta answer 400 or 404 for a game version they don't know: say so instead of showing the raw HTTP error
+    let v = get_json(&format!("{}/{mc}", meta_url(loader).unwrap())).map_err(|e| if e.contains("answered 400") || e.contains("answered 404") { none() } else { e })?;
+    match v.as_array() { Some(a) if !a.is_empty() => Ok(a.clone()), _ => Err(none()) }
 }
 
 fn is_stable(v: &Value) -> bool {
@@ -120,14 +122,14 @@ pub fn installer_info(loader: &str, mc: &str, version: Option<&str>) -> Res<(Str
     if loader == "forge" {
         let promos = forge_promos()?;
         let b = promos.get(&format!("{mc}-recommended")).or_else(|| promos.get(&format!("{mc}-latest"))).and_then(|v| v.as_str())
-            .ok_or_else(|| format!("Forge has no build for Minecraft {mc}."))?.to_string();
+            .ok_or_else(|| format!("Forge isn't available for Minecraft {mc}."))?.to_string();
         let u = installer_url(loader, mc, &b);
         return Ok((b, u));
     }
     if mc == "1.20.1" { return Err("NeoForge starts at Minecraft 1.20.2. Use Forge for 1.20.1.".into()); }
     let pre = neo_prefix(mc);
     let cands: Vec<String> = neo_versions()?.into_iter().filter(|v| v.starts_with(&pre)).collect();
-    if cands.is_empty() { return Err(format!("NeoForge has no build for Minecraft {mc}.")); }
+    if cands.is_empty() { return Err(format!("NeoForge isn't available for Minecraft {mc}.")); }
     let stable: Vec<&String> = cands.iter().filter(|c| !c.contains('-')).collect();
     let pool: Vec<&String> = if stable.is_empty() { cands.iter().collect() } else { stable };
     let v = pool.into_iter().max_by_key(|c| vkey(c)).unwrap().clone();
@@ -155,14 +157,14 @@ pub fn loader_versions(loader: &str, mc: &str) -> Res {
         names.extend(rec.iter().cloned().chain(lat.iter().cloned()));
         names.sort_by(|a, b| vkey(b).cmp(&vkey(a)));
         names.dedup();
-        if names.is_empty() { return Err(format!("Forge has no build for Minecraft {mc}.")); }
+        if names.is_empty() { return Err(format!("Forge isn't available for Minecraft {mc}.")); }
         return Ok(json!({"versions": names, "stable": rec.unwrap_or_else(|| names[0].clone()), "latest": names[0]}));
     }
     if mc == "1.20.1" { return Err("NeoForge starts at Minecraft 1.20.2. Use Forge for 1.20.1.".into()); }
     let pre = neo_prefix(mc);
     let mut names: Vec<String> = neo_versions()?.into_iter().filter(|v| v.starts_with(&pre)).collect();
     names.sort_by(|a, b| vkey(b).cmp(&vkey(a)));
-    if names.is_empty() { return Err(format!("NeoForge has no build for Minecraft {mc}.")); }
+    if names.is_empty() { return Err(format!("NeoForge isn't available for Minecraft {mc}.")); }
     let stable = names.iter().find(|v| !v.contains('-')).cloned().unwrap_or_else(|| names[0].clone());
     Ok(json!({"versions": names, "stable": stable, "latest": names[0]}))
 }

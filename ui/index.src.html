@@ -5,8 +5,8 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 /* ---- themes (modelled on the Modrinth app: Dark, Light, OLED) ---- */
 :root,html[data-theme=oled]{--bg:#000;--bar:#000;--card:#16181c;--card2:#1d1f23;--line:#26292f;--input:#16181c;--btn:#26292f;--btnh:#30333a;--chip:#26292f;--text:#b0bac5;--head:#ecf9fb;--mut:#96a2b0;--accent:#1bd96a;--on:#000;--tint:rgba(27,217,106,.15);--shadow:rgba(0,0,0,.7)}
-html[data-theme=blackout]{--bg:#000;--bar:#000;--card:#000;--card2:#000;--line:#26282d;--input:#000;--btn:#000;--btnh:#101114;--chip:#000;--text:#b0bac5;--head:#ecf9fb;--mut:#8b96a3;--green:#000;--greenh:#0d0e10;--accent:#fff;--on:#fff;--onacc:#fff;--tint:rgba(255,255,255,.09);--shadow:rgba(0,0,0,1)}
-html[data-theme=blackout] .btn.brand{color:var(--onacc,#fff)}
+html[data-theme=blackout]{--bg:#000;--bar:#000;--card:#000;--card2:#000;--line:#26282d;--input:#000;--btn:#000;--btnh:#101114;--chip:#000;--text:#b0bac5;--head:#ecf9fb;--mut:#8b96a3;--green:#fff;--greenh:#e6e6e6;--accent:#fff;--on:#000;--onacc:#000;--tint:rgba(255,255,255,.09);--shadow:rgba(0,0,0,1)}
+html[data-theme=blackout] .btn.brand{background:var(--brandbg,#000);color:var(--brandon,#fff)}html[data-theme=blackout] .btn.brand:hover:not(:disabled){background:var(--brandbgh,#14151a)}
 html[data-theme=blackout] .sw{border:1px solid var(--line);box-sizing:border-box}
 html[data-theme=blackout] .sw.on{background:var(--accent);border-color:var(--accent)}html[data-theme=blackout] .sw.on::after{background:#000}
 html[data-theme=blackout] .seg button.on,html[data-theme=blackout] #dlm .bdg{background:var(--accent);color:#000}
@@ -326,6 +326,8 @@ textarea{width:100%;background:var(--input);border:1px solid var(--line);border-
 .cols{display:flex;gap:9px;flex-wrap:wrap}.cols button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 2px var(--bg)}.cols button.on{border-color:var(--head)}
 .pills{display:flex;gap:9px;flex-wrap:wrap}
 .opt2{border:1px solid transparent;background:var(--card2);color:var(--text);border-radius:16px;padding:9px 16px;font-weight:600;cursor:pointer;display:inline-flex;gap:7px;align-items:center}.opt2:hover:not([disabled]):not(.on){background:var(--btn);color:var(--head)}
+.flyring{position:fixed;width:30px;height:30px;border-radius:50%;border:2px solid var(--accent);pointer-events:none;z-index:99998}
+.flydot{position:fixed;left:0;top:0;width:30px;height:30px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px 3px var(--accent),0 0 0 2px color-mix(in srgb,var(--accent) 40%,transparent);pointer-events:none;z-index:99999;will-change:transform}
 .mpv{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;margin:12px 0 4px}.mpr{display:flex;align-items:center;gap:12px;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:10px 14px}.mpr.cur{border-color:var(--green);background:var(--tint)}.mpr .mi{flex:1;min-width:0}.mpr .mi b{font-size:16px}.mpr .mi .ms{color:var(--mut);font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mpr .tp{font-size:12px;border-radius:9999px;padding:1px 8px;border:1px solid var(--line);color:var(--mut);margin-left:8px;font-weight:500}.mpr .tp.beta,.mpr .tp.alpha{color:#e6a23c;border-color:#e6a23c}
 .opt2.on{border-color:var(--green);background:var(--tint);color:var(--accent)}.opt2[disabled]{opacity:.5;cursor:default}
 .xin{position:relative}.xin input{padding-right:46px}.xin .ib{position:absolute;right:5px;top:50%;transform:translateY(-50%)}
@@ -463,7 +465,7 @@ const mixHex=(h,t,a)=>{const x=hexRGB(h),y=hexRGB(t);return rgbHex(x.map((v,i)=>
 const lumOf=h=>{const c=hexRGB(h).map(v=>v/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]};
 const contrastOf=(a,b)=>{const x=lumOf(a),y=lumOf(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
 function applyAccent(hex){
-  const R=document.documentElement,st=R.style,props=["--green","--greenh","--accent","--tint","--on","--onacc","--gl2","--accrgb"],HEX=/^#[0-9a-f]{6}$/i;
+  const R=document.documentElement,st=R.style,props=["--green","--greenh","--accent","--tint","--on","--onacc","--gl2","--accrgb","--brandbg","--brandbgh","--brandon"],HEX=/^#[0-9a-f]{6}$/i;
   props.forEach(p=>st.removeProperty(p));   // back to the theme's own values first, so a theme default can be read below
   const cs=getComputedStyle(R),base=HEX.test(hex||"")?hex:cs.getPropertyValue("--green").trim();
   if(HEX.test(base)){st.setProperty("--accrgb",hexRGB(base).join(","));st.setProperty("--gl2",rgbHex(hexRGB(base).map(v=>255-v)))}   // complement = 2nd chromatic-aberration channel
@@ -472,7 +474,7 @@ function applyAccent(hex){
   let txt=hex;for(let i=0;i<24&&contrastOf(txt,bg)<need;i++)txt=mixHex(txt,toward,.1);
   const lum=contrastOf(hex,"#000000")*.05-.05,onFill=lum<.3?"#ffffff":"#04130a",[r,g,b]=hexRGB(hex);   /* dark fill = white text (switches before the usual contrast crossover, so dim colors never get dark text) */
   st.setProperty("--green",hex);st.setProperty("--greenh",mixHex(hex,"#ffffff",.18));st.setProperty("--accent",txt);
-  st.setProperty("--tint",`rgba(${r},${g},${b},${LT?.14:.18})`);st.setProperty("--on",onFill);st.setProperty("--onacc",onFill)}
+  st.setProperty("--tint",`rgba(${r},${g},${b},${LT?.14:.18})`);st.setProperty("--on",onFill);st.setProperty("--onacc",onFill);st.setProperty("--brandbg",hex);st.setProperty("--brandbgh",mixHex(hex,"#ffffff",.18));st.setProperty("--brandon",onFill)}
 mq.addEventListener&&mq.addEventListener("change",()=>{if(S.settings.theme==="system")applyTheme("system")});
 
 /* ---------- theme overlays ----------
@@ -903,7 +905,7 @@ function shView(l,n){
   if($("#lbp"))$("#lbp").onclick=()=>go2(-1);if($("#lbn"))$("#lbn").onclick=()=>go2(1);
   document.onkeydown=e=>{if(e.key==="Escape")closeOver();else if(e.key==="ArrowLeft"&&n>0)go2(-1);else if(e.key==="ArrowRight"&&n<l.length-1)go2(1)};
   $("#lbo").onclick=()=>api(`/screenshots/${x.iid}/open`,"POST").catch(e=>toast(e.message));
-  $("#lbd").onclick=async()=>{if(!confirm(`Delete ${x.file}? This can't be undone.`))return;
+  $("#lbd").onclick=async()=>{if(!await confirmBox({title:"Delete screenshot?",body:`${x.file} will be deleted. This can't be undone.`,ok:"Delete",danger:true}))return;
     try{await api(`/screenshots/${encodeURIComponent(x.iid)}/img?f=${encodeURIComponent(x.path)}`,"DELETE")}catch(e){return toast(e.message)}
     S.sh.all=S.sh.all.filter(y=>y!==x);const nl=shList();closeOver();shDraw();if(nl.length)shView(nl,Math.min(n,nl.length-1))};
 }
@@ -1009,7 +1011,7 @@ function popMenu(btn,items,at){
 }
 addEventListener("keydown",e=>{if(e.key==="Escape")closePops()});
 const instMenu=(btn,i)=>popMenu(btn,[["Open folder","folder",0,()=>openInst(i)],["Groups...","newgroup",0,()=>groupsModal(i)],["Export modpack","upload",0,()=>exportModal(i)],["Use in TLauncher","box",0,()=>tlExport(i)],["Delete","trash",1,()=>delInst(i)]]);
-async function delInst(i){if(confirm(`Delete "${i.name}" and everything in it?`)){try{await api("/instances/"+i.id,"DELETE");if(S.page==="inst")go("home");else{S.instances=(await api("/instances")).instances;await load(S.page,S.inst)}}catch(e){toast(e.message)}}}
+async function delInst(i){if(await confirmBox({title:"Delete instance?",body:`"${i.name}" and everything in it (worlds, mods, settings) will be deleted. This can't be undone.`,ok:"Delete",danger:true})){try{await api("/instances/"+i.id,"DELETE");if(S.page==="inst")go("home");else{S.instances=(await api("/instances")).instances;await load(S.page,S.inst)}}catch(e){toast(e.message)}}}
 const openInst=i=>api(`/instances/${i.id}/open`,"POST").catch(e=>toast(e.message));
 function addContent(d){const van=d.loader==="vanilla";S.bt=d.id;S.bsrv=null;S.bsrvT=null;S.start=false;S.br.mc=d.mc;S.br.loader=van?"":d.loader;S.br.page=1;if(S.br.type==="modpack"||(van&&S.br.type==="mod"))S.br.type=van?"resourcepack":"mod";go("browse")}
 async function dupInst(i){try{const d=await api(`/instances/${i.id}/duplicate`,"POST",{});S.instances=(await api("/instances")).instances;await load(S.page,S.inst);toast(`Created ${d.name}`,3000)}catch(e){toast(e.message,6000)}}
@@ -1104,8 +1106,8 @@ function bindAcc(m){
   a.onclick=()=>{S.accOpen=!S.accOpen;redraw()};
   m.querySelectorAll("[data-an]").forEach(r=>r.onclick=async e=>{if(e.target.closest("[data-ad],[data-ao]"))return;try{S.settings=await api("/settings","POST",{username:r.dataset.an,ms_active:""});redraw()}catch(x){toast(x.message)}});
   m.querySelectorAll("[data-mid]").forEach(r=>r.onclick=async e=>{if(e.target.closest("[data-mo]"))return;try{S.settings=await api("/settings","POST",{ms_active:r.dataset.mid});redraw()}catch(x){toast(x.message)}});
-  m.querySelectorAll("[data-mo]").forEach(b=>b.onclick=async()=>{if(!confirm("Sign this Microsoft account out of Orbit?"))return;try{S.settings=await api("/settings","POST",{ms_remove:b.dataset.mo});redraw()}catch(x){toast(x.message)}});
-  m.querySelectorAll("[data-ad]").forEach(b=>b.onclick=async()=>{if(!confirm(`Remove ${b.dataset.ad}?`))return;try{S.settings=await api("/settings","POST",{remove_account:b.dataset.ad});redraw()}catch(x){toast(x.message)}});
+  m.querySelectorAll("[data-mo]").forEach(b=>b.onclick=async()=>{if(!await confirmBox({title:"Sign out?",body:"This Microsoft account will be signed out of Orbit.",ok:"Sign out",danger:true}))return;try{S.settings=await api("/settings","POST",{ms_remove:b.dataset.mo});redraw()}catch(x){toast(x.message)}});
+  m.querySelectorAll("[data-ad]").forEach(b=>b.onclick=async()=>{if(!await confirmBox({title:"Remove account?",body:`${b.dataset.ad} will be removed from Orbit.`,ok:"Remove",danger:true}))return;try{S.settings=await api("/settings","POST",{remove_account:b.dataset.ad});redraw()}catch(x){toast(x.message)}});
   m.querySelectorAll("[data-ao]").forEach(b=>b.onclick=e=>{e.stopPropagation();const n=b.dataset.ao,has=!!((S.settings.avatars||{})[n]);
     popMenu(b,[["Choose or customize picture...","brush",0,()=>avatarModal(n,redraw)],["Upload picture...","upload",0,()=>pickAvatar(n,redraw)],...(has?[["Remove picture","trash",1,async()=>{try{S.settings=await api("/settings","POST",{avatar_reset:n});redraw()}catch(x){toast(x.message)}}]]:[])])});
   const ad=m.querySelector("#aadd");if(ad)ad.onclick=()=>addAccountModal(redraw);
@@ -1184,7 +1186,7 @@ function libDraw(){
   box.querySelectorAll(".gtog").forEach(b=>b.onclick=()=>{const g=b.closest(".gsec");L.shut[g.dataset.gk]=!L.shut[g.dataset.gk];g.classList.toggle("shut")});
   box.querySelectorAll("[data-gm]").forEach(b=>b.onclick=()=>{const n=b.dataset.gm;popMenu(b,[["Rename group","brush",0,async()=>{const v=await askText("Rename group","Group name",n,"Rename");if(!v||v===n)return;
       try{S.groups=(await api("/groups","POST",{rename:n,name:v})).groups;S.instances=(await api("/instances")).instances;libDraw()}catch(e){toast(e.message,5000)}}],
-     ["Delete group","trash",1,async()=>{if(!confirm(`Delete the group "${n}"? The instances in it are kept.`))return;
+     ["Delete group","trash",1,async()=>{if(!await confirmBox({title:"Delete group?",body:`The group "${n}" will be deleted. The instances in it are kept.`,ok:"Delete",danger:true}))return;
       try{S.groups=(await api("/groups","POST",{delete:n})).groups;S.instances=(await api("/instances")).instances;libDraw()}catch(e){toast(e.message,5000)}}]])});
   box.querySelectorAll(".lcard").forEach(c=>{const i=S.instances.find(x=>x.id===c.dataset.id);c.onclick=()=>go("inst",c.dataset.id);
     c.querySelector(".lp").onclick=e=>{e.stopPropagation();setPin(c.dataset.id);libDraw()};
@@ -1192,6 +1194,35 @@ function libDraw(){
 }
 const getPins=()=>Array.isArray(UF().pins)?UF().pins:[];
 const setPin=id=>{const a=[...getPins()],k=a.indexOf(id);if(k<0)a.push(id);else a.splice(k,1);S.settings.ui_flags={...UF(),pins:a};ufSet({pins:a})};
+/* ---------- in-app dialogs: replace the browser's confirm() ("127.0.0.1:port says ...") ----------
+   Own layer above the page (z-index 70), so a dialog that is already open stays open underneath it.
+   dlg({title, body, notes, notesTitle, buttons:[{label,value,kind}], danger}) resolves with the clicked button's value
+   (false on Escape or a click outside). notes is a scrollable text box, used for changelogs. */
+const plainMd=t=>String(t||"").replace(/!\[[^\]]*\]\([^)]*\)/g,"").replace(/\[([^\]]+)\]\([^)]*\)/g,"$1").replace(/^#{1,6}\s*/gm,"").replace(/\*\*|__/g,"").replace(/\n{3,}/g,"\n\n").trim();
+function dlg({title="Are you sure?",body="",notes="",notesTitle="",buttons=[],danger=false}={}){
+  return new Promise(res=>{
+    const el=document.createElement("div");el.className="modal-bg";el.style.zIndex=70;
+    const btn=(b,i)=>`<button type="button" class="btn ${b.kind==="danger"?"":b.kind||""}" data-i="${i}" ${b.kind==="danger"?'style="background:var(--red);color:#fff"':""}>${esc(b.label)}</button>`;
+    el.innerHTML=`<div class="modal" style="width:${notes?540:440}px" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><h2 style="margin:0 0 10px">${esc(title)}</h2>`
+      +(body?`<div style="white-space:pre-line;line-height:1.5;color:var(--head)">${esc(body)}</div>`:"")
+      +(notes?`${notesTitle?`<div class="meta" style="margin:14px 0 6px;font-weight:600">${esc(notesTitle)}</div>`:""}<div style="max-height:260px;overflow:auto;white-space:pre-wrap;line-height:1.5;font-size:14px;color:var(--mut);background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-top:${notesTitle?0:12}px">${esc(notes)}</div>`:"")
+      +`<div class="gap" style="justify-content:flex-end;margin-top:22px">${buttons.map(btn).join("")}</div></div>`;
+    const done=v=>{window.removeEventListener("keydown",key,true);el.remove();res(v)};
+    const key=e=>{if(e.key==="Escape"){e.stopImmediatePropagation();e.preventDefault();done(false)}};
+    window.addEventListener("keydown",key,true);
+    el.onmousedown=e=>{if(e.target===el)done(false)};
+    el.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>done(buttons[+b.dataset.i].value));
+    document.body.append(el);
+    const f=el.querySelectorAll("[data-i]");(danger?f[0]:f[f.length-1])?.focus();
+  });
+}
+/* confirm({title, body, notes, notesTitle, ok, cancel, danger}) -> Promise<boolean> */
+const confirmBox=o=>dlg({...o,buttons:[{label:o.cancel||"Cancel",value:false},{label:o.ok||"Confirm",value:true,kind:o.danger?"danger":"brand"}]});
+/* the changelog of one version, shown on screen (url, when given, adds an "Open page" button) */
+async function showChangelog(title,text,url){
+  const v=await dlg({title,notesTitle:"Changelog",notes:plainMd(text)||"No changelog was provided for this version.",buttons:[...(url?[{label:"Open page",value:"open"}]:[]),{label:"Close",value:false,kind:"brand"}]});
+  if(v==="open")openUrl(url);
+}
 function askText(title,label,value="",ok="Save"){return new Promise(res=>{
   openOver(`<div class="modal-bg"><div class="modal"><h2>${esc(title)}</h2><div class="field"><label class="l" for="at">${esc(label)}</label><input type="text" id="at" maxlength="40" value="${esc(value)}"></div><div class="gap" style="justify-content:flex-end;margin-top:18px"><button class="btn" id="ac">Cancel</button><button class="btn brand" id="ao">${esc(ok)}</button></div></div></div>`);
   const t=$("#at");t.focus();t.select();$("#ac").onclick=()=>{closeOver();res(null)};
@@ -1361,12 +1392,13 @@ async function customStep(){
   <div class="field" id="lvf"><label class="l">Loader version</label><div class="pills" id="lvp"></div><div id="lvd" style="margin-top:9px"></div><div class="note" id="lvn"></div></div>
   <div class="field" id="optf"><label class="tog" id="optl"><input type="checkbox" id="opt"> Add Optimization</label><div class="note" id="optn"></div></div>
   <div class="note">It will be created in: <span style="user-select:all">${esc(S.settings.folder||"your instances folder")}</span></div>
+  <div class="note" id="okn" style="display:none;color:var(--red);margin:20px 0 -12px;text-align:right"></div>
   <div class="gap" style="justify-content:space-between;margin-top:23px"><button class="btn" id="cc">${ic("back","sm")}Back</button><button class="btn brand" id="ok">${ic("plus","sm")}Create instance</button></div>`);
   ed=iconEditor($("#ied"));
   $("#cc").onclick=createModal;
   const ph=()=>{$("#cn").placeholder=dflt();drawOpt()};
-  /* "Add Optimization" only works for Fabric/NeoForge on the one game version the optimization set targets (GET /optimization). Returns why it's off, or "" when usable. */
-  const optWhy=()=>{if(!OPT)return OPTERR||"Checking availability...";if(!OPT.loaders.includes(loader))return "Available for Fabric and NeoForge.";
+  /* "Add Optimization" works for the loaders in GET /optimization on game versions up to its ceiling the optimization set targets (GET /optimization). Returns why it's off, or "" when usable. */
+  const optWhy=()=>{if(!OPT)return OPTERR||"Checking availability...";if(!OPT.loaders.includes(loader))return "Available for "+OPT.loaders.map(l=>LOADERS[l]).join(", ")+" instances.";
     const c=OPT.ceilings[loader];if(!c)return `Not available for ${LOADERS[loader]} right now.`;
     return /^\d+(\.\d+)*$/.test(mc)&&vcmp(mc,c)<=0?"":`Available for ${LOADERS[loader]} releases up to Minecraft ${c}. Pick ${c} or older to turn it on.`};
   function drawOpt(){const why=optWhy(),el=$("#opt");if(!el)return;if(why)opt=false;
@@ -1376,13 +1408,14 @@ async function customStep(){
     $("#lp").querySelectorAll("[data-l]").forEach(b=>b.onclick=()=>{if(loader===b.dataset.l)return;loader=b.dataset.l;lvMode="stable";drawLoaders();ph();loadLV()})};
   const lvChoice=()=>!lv?"":lvMode==="latest"?lv.latest:lvMode==="other"?lvPick:lv.stable;
   const drawLV=()=>{
-    $("#lvf").style.display=loader==="vanilla"?"none":"";if(loader==="vanilla"){$("#ok").disabled=!mc;return}
+    $("#lvf").style.display=loader==="vanilla"?"none":"";if(loader==="vanilla"){$("#ok").disabled=!mc;$("#okn").style.display="none";return}
     $("#lvp").innerHTML=[["stable","Stable"],["latest","Latest"],["other","Other"]].map(([k,t])=>`<button type="button" class="opt2 ${lvMode===k?"on":""}" data-m="${k}" ${lv?"":"disabled"}>${lvMode===k?ic("check","sm"):""}${t}</button>`).join("");
     $("#lvp").querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{lvMode=b.dataset.m;if(lvMode==="other"&&!lvPick)lvPick=lv.stable;drawLV()});
     $("#lvd").innerHTML="";
     if(lv&&lvMode==="other"){const el=document.createElement("div");$("#lvd").append(el);dropdown(el,()=>lv.versions,lvPick,v=>{lvPick=v;drawLV()},"Select version")}
-    $("#lvn").textContent=lvErr?lvErr:!lv?"Loading loader versions...":`${LOADERS[loader]} ${lvChoice()}${lvMode==="stable"?" (recommended)":lvMode==="latest"?" (newest build)":""}`;
+    $("#lvn").textContent=lvErr?"":!lv?"Loading loader versions...":`${LOADERS[loader]} ${lvChoice()}${lvMode==="stable"?" (recommended)":lvMode==="latest"?" (newest build)":""}`;
     $("#ok").disabled=!!lvErr||!lv;
+    const okn=$("#okn");okn.textContent=lvErr;okn.style.display=lvErr?"":"none";
   };
   const loadLV=async()=>{
     if(loader==="vanilla"||!mc){lv=null;lvErr="";drawLV();return}
@@ -1432,12 +1465,12 @@ function updateModal(d,list=S.upd.list||[],run=k=>job("update",{keys:k},"Updatin
   if(!list.length)return;
   openOver(`<div class="modal-bg"><div class="modal" style="width:823px;max-width:96vw"><div class="row c" style="margin-bottom:16px"><h2 class="grow" style="margin:0">Update projects</h2><button class="xb" id="ux" aria-label="Close">${ic("x")}</button></div>
   <div class="tbl utbl" style="max-height:434px;overflow-y:auto"><div class="tr h"><input type="checkbox" id="ua" checked aria-label="Select all"><span>Project</span><span>Current version / New version</span><span style="text-align:right">Changelog</span></div>
-  ${list.map(u=>`<div class="tr"><input type="checkbox" data-uk="${esc(u.key)}" checked aria-label="Update ${esc(u.title)}"><div class="pj">${tile(u.title,u.icon_url)}<div class="nm" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.title)}</div></div><div class="vsn"><span class="meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%">${esc(u.current)}</span>${ic("fwd","sm")}<b>${esc(u.new)}</b></div><div style="text-align:right">${u.url?`<button class="btn sm" data-ul="${esc(u.url)}">View</button>`:""}</div></div>`).join("")}</div>
+  ${list.map(u=>`<div class="tr"><input type="checkbox" data-uk="${esc(u.key)}" checked aria-label="Update ${esc(u.title)}"><div class="pj">${tile(u.title,u.icon_url)}<div class="nm" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.title)}</div></div><div class="vsn"><span class="meta" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:45%">${esc(u.current)}</span>${ic("fwd","sm")}<b>${esc(u.new)}</b></div><div style="text-align:right"><button class="btn sm" data-ul="${esc(u.key)}">View</button></div></div>`).join("")}</div>
   <div class="gap" style="justify-content:space-between;margin-top:18px;align-items:center"><span class="meta">We can't guarantee updates are safe for your worlds. Review the changelogs and consider a backup.</span><span class="gap"><button class="btn" id="uc">${ic("x","sm")}Cancel</button><button class="btn brand" id="uo"></button></span></div></div></div>`);
   const ks=()=>[...ov().querySelectorAll("[data-uk]:checked")].map(x=>x.dataset.uk);
   const cnt=()=>{const n=ks().length;$("#uo").disabled=!n;$("#uo").innerHTML=`${ic("dl","sm")}Update ${n} project${n===1?"":"s"}`;$("#ua").checked=n===list.length};
   ov().querySelectorAll("[data-uk]").forEach(x=>x.onchange=cnt);$("#ua").onchange=e=>{ov().querySelectorAll("[data-uk]").forEach(x=>x.checked=e.target.checked);cnt()};
-  ov().querySelectorAll("[data-ul]").forEach(b=>b.onclick=()=>openUrl(b.dataset.ul));
+  ov().querySelectorAll("[data-ul]").forEach(b=>b.onclick=()=>{const u=list.find(x=>x.key===b.dataset.ul);if(u)showChangelog(`${u.title} ${u.new}`,u.changelog,u.url)});
   $("#ux").onclick=$("#uc").onclick=closeOver;cnt();
   $("#uo").onclick=()=>{const k=ks();closeOver();run(k)};
 }
@@ -1502,7 +1535,7 @@ async function modpackVersions(p,d){
     $(".mpv").querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>pick(r.versions.find(v=>v.id===b.dataset.v)))};
   const pick=async v=>{
     const t=Date.parse(v.date),word=t>curT?"Update":"Downgrade";
-    if(!confirm(`${word} ${r.title} from ${r.version} to ${v.version_number}?\n\nMinecraft: ${(v.mc||[]).slice(-3).join(", ")}\nThis replaces the pack's mods and config files. Your worlds and screenshots stay.`))return;
+    if(!await confirmBox({title:`${word} ${r.title}?`,body:`${r.version} \u2192 ${v.version_number}\nMinecraft: ${(v.mc||[]).slice(-3).join(", ")}\n\nThis replaces the pack's mods and config files. Your worlds and screenshots stay.`,notes:plainMd(v.changelog),notesTitle:"Changelog",ok:word,danger:word==="Downgrade"}))return;
     closeOver();const wait=toast(`${word}ing to ${v.version_number}. This can take a few minutes...`,900000);
     const tk=addTask(d.name||"Instance",d.icon?iconUrl(d):"",`${word} to ${v.version_number}`);
     try{const x=await api(`/instances/${d.id}/modpack-switch`,"POST",{version_id:v.id,task:tk.id});S.detail=x;wait.remove();endTask(tk,true);S.upd={};S.instances=(await api("/instances")).instances;toast(`Now on ${v.version_number}. Press Update all if some mods need builds for the new version.`,7000);render()}
@@ -1747,10 +1780,10 @@ function tlDone(r){
   $("#td").onclick=closeOver;
 }
 async function job(act,body,msg){
-  if(act==="remove"&&body.keys&&body.keys.length>1&&!confirm(`Remove ${body.keys.length} items?`))return;
+  if(act==="remove"&&body.keys&&body.keys.length>1&&!await confirmBox({title:"Remove items?",body:`${body.keys.length} items will be removed from this instance.`,ok:"Remove",danger:true}))return;
   const t=toast(msg,60000),ins=S.instances.find(i=>i.id===S.inst)||{name:"Instance"};
   const N={update:"Updating items",remove:"Removing items","set-version":"Switching version",relink:"Matching with Modrinth"}[act];
-  const tk=N?addTask(ins.name,ins.icon?iconUrl(ins):"",body.keys&&act==="update"?`Updating ${body.keys.length} item${body.keys.length===1?"":"s"}`:N):null;
+  const tk=N?addTask(ins.name,ins.icon?iconUrl(ins):"",body.keys&&act==="update"?`Updating ${body.keys.length} item${body.keys.length===1?"":"s"}`:N,act==="remove"||act==="relink"?false:undefined):null;   /* removing/matching isn't a download: no orb */
   try{const d=await api(`/instances/${S.inst}/${act}`,"POST",{...body,task:tk&&tk.id});S.detail=d;t.remove();tk&&endTask(tk,true);toast(d.log.slice(-3).join("  |  ")||"Done",5000);render()}
   catch(e){t.remove();tk&&endTask(tk,false,e.message);toast(e.message,6000)}
 }
@@ -1758,7 +1791,29 @@ async function job(act,body,msg){
 
 /* ---------- download manager ---------- */
 const saveTasks=()=>{S.tasks=S.tasks.slice(-60);api("/tasks","POST",{tasks:S.tasks}).catch(()=>{})};
-function addTask(title,icon_url,sub){const t={id:Date.now()+""+Math.random().toString(36).slice(2,6),title,icon_url:icon_url||"",sub,status:"running",ts:Date.now()};S.tasks.push(t);saveTasks();topbar();pollTasks();return t}
+/* a circle pops off the button you pressed and floats up to the downloads button when an install starts */
+let lastBtn=null,lastBtnT=0;
+const markOrigin=e=>{const b=e.target.closest&&e.target.closest("button");if(!b)return;
+  const picker=b.closest(".pop,.psub,.modal,.modal-bg,.cshell"),fresh=lastBtn&&Date.now()-lastBtnT<10000;
+  if(picker&&fresh)return;   /* choosing an instance in a picker: still launch from the Add button that opened it */
+  const r=b.getBoundingClientRect();lastBtn={x:r.left+r.width/2,y:r.top+r.height/2,w:r.width};lastBtnT=Date.now()};
+document.addEventListener("pointerdown",markOrigin,true);document.addEventListener("click",markOrigin,true);
+function flyToDownloads(from){
+  const to=$("#dlm");if(!from||!to)return;
+  if(document.documentElement.dataset.anim==="off")return;
+  const b=to.getBoundingClientRect();if(!b.width)return;
+  const x0=from.x,y0=from.y,x1=b.left+b.width/2,y1=b.top+b.height/2,cx=x0+(x1-x0)*.25,cy=Math.min(y0,y1)-110,R=15;
+  const ring=document.createElement("div");ring.className="flyring";ring.style.left=x0-R+"px";ring.style.top=y0-R+"px";document.body.append(ring);
+  ring.animate([{transform:"scale(.5)",opacity:.9},{transform:"scale(2.6)",opacity:0}],{duration:480,easing:"ease-out"}).onfinish=()=>ring.remove();
+  const d=document.createElement("div");d.className="flydot";document.body.append(d);
+  const N=20,frames=[{transform:`translate(${x0-R}px,${y0-R}px) scale(.3)`,opacity:0,offset:0},{transform:`translate(${x0-R}px,${y0-R}px) scale(1.15)`,opacity:1,offset:.1}];
+  for(let k=0;k<=N;k++){const t=k/N,u=1-t,x=u*u*x0+2*u*t*cx+t*t*x1,y=u*u*y0+2*u*t*cy+t*t*y1;
+    frames.push({transform:`translate(${x-R}px,${y-R}px) scale(${1.1-.6*t})`,opacity:t>.92?(1-t)*12:1,offset:.1+.9*t})}
+  d.animate(frames,{duration:1000,easing:"cubic-bezier(.4,0,.3,1)"}).onfinish=()=>{d.remove();to.animate([{transform:"scale(1)"},{transform:"scale(1.3)"},{transform:"scale(1)"}],{duration:340,easing:"ease-out"})};
+}
+function addTask(title,icon_url,sub,from){
+  try{let o=from!==false&&lastBtn&&Date.now()-lastBtnT<10000?lastBtn:null;lastBtn=null;if(!o&&from&&from!==false&&from.getBoundingClientRect){const r=from.getBoundingClientRect();o={x:r.left+r.width/2,y:r.top+r.height/2}}if(o)flyToDownloads(o)}catch(e){}
+  const t={id:Date.now()+""+Math.random().toString(36).slice(2,6),title,icon_url:icon_url||"",sub,status:"running",ts:Date.now()};S.tasks.push(t);saveTasks();topbar();pollTasks();return t}
 let taskPoll=null;
 function pollTasks(){
   if(taskPoll)return;
@@ -1773,11 +1828,12 @@ function endTask(t,ok,sub){delete t.pct;delete t.label;t.status=ok?"done":"error
 function toggleTasks(){S.tpOpen=!S.tpOpen;if(!S.tpOpen){const e=$("#tpan");e&&e.remove()}else drawTasks()}
 function drawTasks(){
   let el=$("#tpan");if(!el){el=document.createElement("div");el.id="tpan";el.className="tpan";document.body.append(el)}
-  const row=t=>`<div class="tit">${tile(t.title,t.icon_url)}<div class="tx"><b>${esc(t.title)}</b><div class="meta ${t.status==="error"?"err":""}">${t.status==="running"?(t.pct!=null?`${Math.round(t.pct*100)}% · `:"")+esc(t.sub)+(t.label?" · "+esc(t.label):""):esc(ago(new Date(+t.ts).toISOString()))+" · "+esc(t.sub)}</div>${t.status==="running"?`<div class="pbar ${t.pct==null?"ind":""}"><i style="width:${t.pct==null?35:Math.round(t.pct*100)}%"></i></div>`:""}</div>${t.status==="running"?"":`<button class="ib" data-td="${esc(t.id)}" aria-label="Remove">${ic("trash","sm")}</button>`}</div>`;
+  const row=t=>`<div class="tit">${tile(t.title,t.icon_url)}<div class="tx"><b>${esc(t.title)}</b><div class="meta ${t.status==="error"?"err":""}">${t.status==="running"?(t.pct!=null?`${Math.round(t.pct*100)}% · `:"")+esc(t.sub)+(t.label?" · "+esc(t.label):""):esc(ago(new Date(+t.ts).toISOString()))+" · "+esc(t.sub)}</div>${t.status==="running"?`<div class="pbar ${t.pct==null?"ind":""}"><i style="width:${t.pct==null?35:Math.round(t.pct*100)}%"></i></div>`:""}</div>${t.status==="running"?`<button class="ib" data-tc="${esc(t.id)}" aria-label="Cancel" title="Cancel">${ic("x","sm")}</button>`:`<button class="ib" data-td="${esc(t.id)}" aria-label="Remove">${ic("trash","sm")}</button>`}</div>`;
   const run=S.tasks.filter(t=>t.status==="running").reverse(),done=S.tasks.filter(t=>t.status!=="running").reverse();
   el.innerHTML=`<h3>Tasks</h3><div class="tb">${run.length?`<div class="tsec">${ic("chev","sm")}<span class="grow">In progress</span></div>${run.map(row).join("")}`:""}${done.length?`<div class="tsec">${ic("chev","sm")}<span class="grow">Complete</span><button class="lnk" id="tcl">Clear all</button></div>${done.map(row).join("")}`:""}${S.tasks.length?"":'<div class="empty" style="padding:34px">No downloads yet.</div>'}</div>`;
   el.onmousedown=e=>e.stopPropagation();
   el.querySelectorAll("[data-td]").forEach(b=>b.onclick=()=>{S.tasks=S.tasks.filter(t=>t.id!==b.dataset.td);saveTasks();drawTasks()});
+  el.querySelectorAll("[data-tc]").forEach(b=>b.onclick=async()=>{const t=S.tasks.find(x=>x.id===b.dataset.tc);if(!t)return;b.disabled=true;t.sub="Cancelling...";drawTasks();try{await api("/task/cancel","POST",{task:t.id})}catch(e){toast(e.message,5000)}});
   const c=$("#tcl");if(c)c.onclick=()=>{S.tasks=S.tasks.filter(t=>t.status==="running");saveTasks();drawTasks()};
 }
 document.addEventListener("mousedown",e=>{if(S.tpOpen&&!e.target.closest("#dlm")){S.tpOpen=false;const t=$("#tpan");t&&t.remove()}});
@@ -1884,7 +1940,7 @@ function rSrv(m){
   $("#sback").onclick=()=>go("servers");
   m.querySelectorAll("[data-st]").forEach(b=>b.onclick=()=>{S.stab=b.dataset.st;S.sfp="";rSrv(m)});
   $("#sico").onclick=()=>srvIconModal(d);
-  $("#smn").onclick=e=>popMenu(e.currentTarget,[["Change icon...","brush",0,()=>srvIconModal(d)],["Open folder","folder",0,()=>sapi(d.name,"/open","POST",{}).catch(x=>toast(x.message))],["Force stop","stop",1,()=>{if(confirm("Force stop? Unsaved progress may be lost."))srvAct("stop",{force:true})}],["Delete server","trash",1,delServer]]);
+  $("#smn").onclick=e=>popMenu(e.currentTarget,[["Change icon...","brush",0,()=>srvIconModal(d)],["Open folder","folder",0,()=>sapi(d.name,"/open","POST",{}).catch(x=>toast(x.message))],["Force stop","stop",1,async()=>{if(await confirmBox({title:"Force stop server?",body:"Unsaved progress may be lost.",ok:"Force stop",danger:true}))srvAct("stop",{force:true})}],["Delete server","trash",1,delServer]]);
   srvHead();startSrvPoll();
   ({overview:svOverview,console:svConsole,content:svContent,files:svFiles,props:svProps,settings:svSettings})[S.stab]($("#tabbody"),d);
 }
@@ -1914,7 +1970,7 @@ async function srvStat(){
   const n=S.srvName;if(!n||S.page!=="srv")return;
   try{const st=await sapi(n,"/stats");if(S.page!=="srv"||S.srvName!==n)return;S.sd.status=st;srvHead();if(S.stab==="overview")svOverStats()}catch(e){}
 }
-async function delServer(){const d=S.sd;if(!confirm(`Delete "${d.name}" and everything in it (worlds included)? This can't be undone.`))return;
+async function delServer(){const d=S.sd;if(!await confirmBox({title:"Delete server?",body:`"${d.name}" and everything in it (worlds included) will be deleted. This can't be undone.`,ok:"Delete",danger:true}))return;
   try{await sapi(d.name,"","DELETE");S.sv.loaded=false;toast("Server deleted");go("servers")}catch(e){toast(e.message,5000)}}
 
 /* overview */
@@ -1996,7 +2052,7 @@ async function svBrowse(d,type){
       $("#sbn").textContent=`Showing ${label}s for ${r.mc?"Minecraft "+r.mc:"any version"}${r.loaders.length?" on "+r.loaders.map(pretty).join(" / "):""}.`;draw()}
     catch(e){$("#sbr").innerHTML=`<div class="empty" style="padding:34px">${esc(e.message)}</div>`}};
   const inst=async(h,btn)=>{
-    if(pack&&!confirm(`Install ${h.title} onto "${d.name}"? Its mods, configs and overrides are written into the server folder and replace files with the same name.`))return;
+    if(pack&&!await confirmBox({title:`Install ${h.title}?`,body:`Its mods, configs and overrides will be written into the folder of "${d.name}" and replace files with the same name.`,ok:"Install"}))return;
     btn.disabled=true;btn.textContent="Installing...";const tk=addTask(h.title,h.icon_url,`Installing to ${d.name}`),w=toast(`Installing ${h.title}...`,120000);
     try{const r=await sapi(d.name,pack?"/content/modpack":"/content/install","POST",pack?{ident:h.ident,task:tk.id}:{project:h.key,task:tk.id});w.remove();endTask(tk,true);toast((r.log||[]).slice(-3).join("  |  ")||"Installed",5000);h.installed=true;draw();
       if(S.page==="srv"&&S.stab==="content")svContent($("#tabbody"),S.sd)}
@@ -2015,7 +2071,7 @@ async function svFiles(box,d){
   box.querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{S.sfp=b.dataset.p;svFiles(box,d)});$("#frf").onclick=()=>svFiles(box,d);
   const up=box.querySelector("[data-up]");if(up)up.onclick=()=>{S.sfp=parts.slice(0,-1).join("/");svFiles(box,d)};
   box.querySelectorAll(".fr[data-n]").forEach(row=>row.onclick=e=>{if(e.target.closest("[data-x]"))return;const n=row.dataset.n;if(row.dataset.d==="1"){S.sfp=join(n);svFiles(box,d)}else if(row.dataset.t==="1")fileEditor(d,join(n),n)});
-  box.querySelectorAll("[data-x]").forEach(b=>b.onclick=async()=>{if(!confirm(`Delete ${b.dataset.x}?`))return;try{await sapi(d.name,"/file?path="+enc(join(b.dataset.x)),"DELETE");svFiles(box,d)}catch(e){toast(e.message)}});
+  box.querySelectorAll("[data-x]").forEach(b=>b.onclick=async()=>{if(!await confirmBox({title:"Delete file?",body:`${b.dataset.x} will be deleted.`,ok:"Delete",danger:true}))return;try{await sapi(d.name,"/file?path="+enc(join(b.dataset.x)),"DELETE");svFiles(box,d)}catch(e){toast(e.message)}});
 }
 async function fileEditor(d,path,name){
   let txt;try{txt=(await sapi(d.name,"/file?path="+enc(path))).text}catch(e){return toast(e.message,5000)}
@@ -2227,13 +2283,13 @@ function drawResults(){
 }
 async function installPack(h,btn){
   btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
-  const t=toast(`Installing ${h.title}. This can take a few minutes...`,900000),tk=addTask(h.title,h.icon_url,"Instance installation");
+  const t=toast(`Installing ${h.title}. This can take a few minutes...`,900000),tk=addTask(h.title,h.icon_url,"Instance installation",btn);
   try{const d=await api("/modpack/install","POST",{source:h.source,ident:h.ident,mc:S.br.mc,task:tk.id});t.remove();endTask(tk,true,"Instance installation");toast(d.log.slice(-1)[0]||"Installed",4000);go("inst",d.id)}
   catch(e){t.remove();endTask(tk,false,e.message);toast(e.message,8000);btn.disabled=false;btn.innerHTML=ic("plus","sm")+"Install"}
 }
 async function installHit(h,iid,btn,type){
-  btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
-  const tk=addTask(h.title,h.icon_url,`Installing to ${(S.instances.find(i=>i.id===iid)||{}).name||"instance"}`);
+  const from=btn;btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
+  const tk=addTask(h.title,h.icon_url,`Installing to ${(S.instances.find(i=>i.id===iid)||{}).name||"instance"}`,from);
   try{const d=await api(`/instances/${iid}/install`,"POST",{source:h.source,ident:h.ident,type:type||S.br.type,task:tk.id});
     const bad=d.log.find(l=>l.startsWith("!"));endTask(tk,!bad,bad?bad.replace(/^!\s*/,""):"Installed");toast(d.log.slice(-2).join("  |  ")||"Installed",5000);
     if(bad){btn.disabled=false;btn.innerHTML=ic("plus","sm")+"Install";return false}
@@ -2242,7 +2298,7 @@ async function installHit(h,iid,btn,type){
 }
 async function installSrvHit(h,btn){
   const n=S.bsrv;btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
-  const tk=addTask(h.title,h.icon_url,`Installing to ${n}`);
+  const tk=addTask(h.title,h.icon_url,`Installing to ${n}`,btn);
   try{const r=await sapi(n,"/content/install","POST",{project:h.key,task:tk.id});
     const bad=(r.log||[]).find(l=>l.startsWith("!"));endTask(tk,!bad,bad?bad.replace(/^!\s*/,""):"Installed");toast((r.log||[]).slice(-2).join("  |  ")||"Installed",5000);
     if(bad){btn.disabled=false;btn.innerHTML=ic("plus","sm")+"Install";return}
@@ -2356,7 +2412,7 @@ function pAccounts(p){
   const redo=async()=>{try{S.settings=await api("/settings")}catch(e){}pAccounts(p)};
   $("#msin").onclick=()=>msSignIn(redo);
   p.querySelectorAll("[data-use]").forEach(b=>b.onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_active:b.dataset.use});pAccounts(p)}catch(e){toast(e.message,5000)}});
-  p.querySelectorAll("[data-out]").forEach(b=>b.onclick=async()=>{if(!confirm("Sign this account out of Orbit?"))return;try{S.settings=await api("/settings","POST",{ms_remove:b.dataset.out});pAccounts(p)}catch(e){toast(e.message,5000)}});
+  p.querySelectorAll("[data-out]").forEach(b=>b.onclick=async()=>{if(!await confirmBox({title:"Sign out?",body:"This account will be signed out of Orbit.",ok:"Sign out",danger:true}))return;try{S.settings=await api("/settings","POST",{ms_remove:b.dataset.out});pAccounts(p)}catch(e){toast(e.message,5000)}});
   if($("#msoff"))$("#msoff").onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_active:""});pAccounts(p)}catch(e){toast(e.message,5000)}};
   $("#mcs").onclick=async()=>{try{S.settings=await api("/settings","POST",{ms_client_id:$("#mcid2").value});toast("Saved",2000)}catch(e){toast(e.message,6000)}};
 }
@@ -2500,7 +2556,7 @@ async function startUpdate(){
   if(S.updBusy||!S.orbUpd)return;
   let busy=false;try{busy=Object.keys((await api("/launch-status")).running||{}).length>0}catch(e){}
   const notes=(S.orbUpd.notes||"").split("\n").slice(0,10).join("\n");
-  if(!confirm("Update Orbit to "+S.orbUpd.latest+"?"+(notes?"\n\n"+notes:"")+"\n\nOrbit will close, install the update and open again by itself."+(busy?"\n\nA game is running; it will be closed too. Save your world first.":"")))return;
+  if(!await confirmBox({title:`Update Orbit to ${S.orbUpd.latest}?`,body:"Orbit will close, install the update and open again by itself."+(busy?"\n\nA game is running; it will be closed too. Save your world first.":""),notes:plainMd(notes),notesTitle:`What's new in ${S.orbUpd.latest}`,ok:"Update now"}))return;
   S.updBusy=true;topbar();
   try{await api("/update/install","POST",{})}catch(e){S.updBusy=false;topbar();toast(e.message,8000)}
 }

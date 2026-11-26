@@ -1,0 +1,41 @@
+# Just Optimized (QUILT) - mod list for Orbit's "Add Optimization".
+# Quilt loads Fabric mods, so this is the Fabric list. No `minecraft` line on purpose: Quilt has no fixed
+# target version here, so the newest game version Quilt itself supports is used as the ceiling.
+# One mod name per line. Orbit finds each one on Modrinth, then picks its newest release for the instance's
+# exact game version and loader; a mod with no such build is skipped. Best first.
+
+quilt-loader = any
+
+[mods]
+BadOptimizations
+Better Render Distance
+ImmediatelyFast
+Ixeris
+Resourceful Config
+ScalableLux
+STFU
+AsyncLogger
+Better Block Entities
+Better Biome Blend
+C2ME
+Cloth Config
+Entity Culling
+Fabric API
+Fabric Language Kotlin
+FastQuit
+FerriteCore
+Fzzy Config
+Krypton
+Language Reload
+Lithium
+ModernFix
+Mod Menu
+More Culling
+Particle Core
+Placeholder API
+Reese's Sodium Options
+Sodium Extra
+Sodium
+VMP
+YACL
+zconfig

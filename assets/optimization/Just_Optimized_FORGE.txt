@@ -1,0 +1,24 @@
+# Just Optimized (FORGE) - mod list for Orbit's "Add Optimization".
+# Forge has no reference pack, so this is a researched list. No `minecraft` line: the newest game version
+# Forge itself supports is the ceiling. Embeddium is Sodium for Forge, Canary does Lithium-style logic fixes,
+# Noisium speeds up world generation, Saturn saves memory, Krypton Reforged is network, Clumps merges XP orbs.
+# One mod name per line. Orbit finds each one on Modrinth, then picks its newest release for the instance's
+# exact game version and loader; a mod with no such build is skipped. Best first.
+
+forge = any
+
+[mods]
+Embeddium
+ModernFix
+FerriteCore
+Entity Culling
+ImmediatelyFast
+Dynamic FPS
+Memory Leak Fix
+Canary
+Noisium
+Saturn
+Krypton Reforged
+BadOptimizations
+ScalableLux
+Clumps
