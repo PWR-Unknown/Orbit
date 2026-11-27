@@ -18,6 +18,10 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+#[path = "../util.rs"]
+#[allow(dead_code)]
+mod util;
+
 /// Set this to your release feed before shipping, or leave it empty and ship an updater.json instead.
 /// Can also be baked in at build time: `ORBIT_UPDATE_SOURCE=github:owner/repo cargo build --release`.
 const DEFAULT_SOURCE: &str = match option_env!("ORBIT_UPDATE_SOURCE") { Some(s) => s, None => "" };
@@ -34,18 +38,8 @@ type Res<T = ()> = Result<T, String>;
 
 // ---------- versions ----------
 
-fn parse_version(s: &str) -> Vec<u64> {
-    let s = s.trim().trim_start_matches(['v', 'V']);
-    let s = s.split(['-', '+']).next().unwrap_or("");
-    s.split('.').map(|p| p.parse().unwrap_or(0)).collect()
-}
-fn is_newer(latest: &str, current: &str) -> bool {
-    let (mut a, mut b) = (parse_version(latest), parse_version(current));
-    let n = a.len().max(b.len());
-    a.resize(n, 0);
-    b.resize(n, 0);
-    a > b
-}
+/// The version rules (pre-release below the release, unparseable is never "newer") are shared with Orbit: src/util.rs.
+fn is_newer(latest: &str, current: &str) -> bool { util::is_newer_version(latest, current) }
 
 // ---------- release feed ----------
 
@@ -365,7 +359,8 @@ mod tests {
     fn version_order() {
         assert!(is_newer("v0.3.0", "0.2.0") && is_newer("0.10.0", "0.9.9") && is_newer("1.0", "0.9.9"));
         assert!(!is_newer("0.2.0", "0.2.0") && !is_newer("0.2", "0.2.0") && !is_newer("0.1.9", "0.2.0"));
-        assert!(!is_newer("0.2.0-beta", "0.2.0"));
+        assert!(!is_newer("0.2.0-beta", "0.2.0") && is_newer("0.2.0", "0.2.0-beta"));
+        assert!(!is_newer("nightly", "0.2.0") && !is_newer("0.3.0", "dev"));
     }
 
     #[test]

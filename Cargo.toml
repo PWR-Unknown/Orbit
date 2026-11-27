@@ -1,6 +1,6 @@
 [package]
 name = "orbit"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2021"
 
 [[bin]]
@@ -23,7 +23,7 @@ wry = { version = "0.47", optional = true }
 rfd = { version = "0.15", optional = true }
 tiny_http = "0.12"
 serde_json = "1"
-ureq = { version = "2", features = ["json"] }
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }   # no gzip: nothing Orbit calls needs it
 flate2 = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 sha1 = "0.10"
@@ -32,13 +32,16 @@ md-5 = "0.10"
 hex = "0.4"
 base64 = "0.22"
 rand = "0.8"
-regex = "1"
+regex = { version = "1", default-features = false, features = ["std", "unicode-perl", "unicode-case"] }   # no unicode-gencat/script, no perf-* tables: smaller binary
 percent-encoding = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 toml = { version = "0.8", default-features = false, features = ["parse"] }   # mods.toml / neoforge.mods.toml
 tar = { version = "0.4", default-features = false }                          # the standalone updater (orbit-updater) reads .tar.gz releases
 serde_yaml = "0.9"                                                           # plugin.yml / paper-plugin.yml
+
+[build-dependencies]
+flate2 = "1"
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
@@ -51,3 +54,17 @@ strip = true
 # Kept as "unwind" on purpose: src/main.rs wraps every request handler (and the app itself) in
 # catch_unwind so one bad request can't kill the launcher. panic = "abort" would turn those into crashes.
 panic = "unwind"
+
+# `cargo build --profile fast`: quick, unoptimised-ish builds for everyday work (output in target/fast/). Releases use [profile.release].
+[profile.fast]
+inherits = "release"
+opt-level = 1
+lto = false
+codegen-units = 16
+incremental = true
+strip = false
+debug = 0
+
+# Dependencies (tiny_http, rusqlite, zip, ...) are built with a little optimisation even in dev builds, so debug runs aren't painfully slow.
+[profile.dev.package."*"]
+opt-level = 1

@@ -1,5 +1,5 @@
 //! Minecraft version profiles, loader versions and loader installers (Mojang piston-meta, Fabric/Quilt meta, Forge/NeoForge).
-use crate::util::{download_file, get_json, get_text, Res};
+use crate::util::{cmp_version_str, download_file, get_json, get_text, Res};
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
@@ -9,6 +9,17 @@ pub const MANIFEST: &str = "https://piston-meta.mojang.com/mc/game/version_manif
 pub fn meta_url(loader: &str) -> Option<&'static str> {
     match loader { "fabric" => Some("https://meta.fabricmc.net/v2/versions/loader"), "quilt" => Some("https://meta.quiltmc.org/v3/versions/loader"), _ => None }
 }
+/// Loader builds an instance or server of `loader` can run, best match first. Quilt loads Fabric mods, so a mod with no
+/// Quilt-tagged build but a Fabric one is fine there; NeoForge no longer loads Forge mods. The one definition of
+/// loader compatibility (optimization, dependency checks and the mod search all use it).
+pub fn runs(loader: &str) -> &'static [&'static str] {
+    match loader { "quilt" => &["quilt", "fabric"], "fabric" => &["fabric"], "forge" => &["forge"], "neoforge" => &["neoforge"], _ => &[] }
+}
+
+/// Which loader to pick when something supports several, best first. NeoForge must come before Forge: names that
+/// merely contain "forge" (`neoforge`) are checked in this order.
+pub const LOADER_PRIORITY: [&str; 4] = ["neoforge", "forge", "fabric", "quilt"];
+
 pub fn label(l: &str) -> &str { match l { "fabric" => "Fabric", "quilt" => "Quilt", "forge" => "Forge", "neoforge" => "NeoForge", o => o } }
 
 
@@ -84,8 +95,6 @@ pub fn meta_profile(loader: &str, mc: &str, version: Option<&str>) -> Res<(Value
 
 // ---------- Forge / NeoForge ----------
 
-pub fn vkey(s: &str) -> Vec<u64> { s.split(['.', '-']).map(|x| x.parse().unwrap_or(0)).collect() }
-
 fn neo_prefix(mc: &str) -> String {
     let p: Vec<&str> = mc.split('.').collect();
     if p[0] == "1" && p.len() > 1 { format!("{}.{}.", p[1], p.get(2).unwrap_or(&"0")) } else { format!("{mc}.") }
@@ -108,6 +117,45 @@ fn installer_url(loader: &str, mc: &str, version: &str) -> String {
     }
 }
 
+/// The NeoForge build to use out of `cands` (all for one game version): the newest stable one; a beta/alpha only
+/// when that game version has no stable build. Instances and servers both go through this.
+pub fn neo_best(cands: &[String]) -> Option<String> {
+    let stable: Vec<&String> = cands.iter().filter(|c| !c.contains('-')).collect();
+    let pool: Vec<&String> = if stable.is_empty() { cands.iter().collect() } else { stable };
+    pool.into_iter().max_by(|a, b| cmp_version_str(a, b)).cloned()
+}
+
+/// The Minecraft version a NeoForge build is for (`21.1.5` -> 1.21.1, `20.4.0` -> 1.20.4, `26.1.0` -> 26.1).
+pub fn neo_mc(v: &str) -> String {
+    let head = v.split('-').next().unwrap_or("");
+    let parts: Vec<&str> = head.split('.').collect();
+    match parts[0].parse::<i64>() {
+        Ok(n) if n < 26 => format!("1.{}{}", parts[0], if parts.len() > 1 && parts[1] != "0" { format!(".{}", parts[1]) } else { String::new() }),
+        Ok(_) => parts.iter().take(2).copied().collect::<Vec<_>>().join("."),
+        Err(_) => String::new(),
+    }
+}
+
+/// Game versions NeoForge can be installed for, newest first: every one `neo_best` finds a build for.
+pub fn neo_game_versions() -> Res<Vec<String>> {
+    let mut by_mc: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for v in neo_versions()? { let mc = neo_mc(&v); if !mc.is_empty() { by_mc.entry(mc).or_default().push(v); } }
+    let mut out: Vec<String> = by_mc.into_iter().filter(|(_, c)| neo_best(c).is_some()).map(|(mc, _)| mc).collect();
+    out.sort_by(|a, b| cmp_version_str(b, a));
+    Ok(out)
+}
+
+/// Game versions Forge can be installed for, newest first: only those with a promotion or at least one build.
+pub fn forge_game_versions() -> Res<Vec<String>> {
+    let m = get_json("https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json")?;
+    let promos = forge_promos().unwrap_or_default();
+    let mut out: Vec<String> = m.as_object().into_iter().flatten()
+        .filter(|(mc, builds)| builds.as_array().map_or(false, |b| !b.is_empty()) || promos.contains_key(&format!("{mc}-recommended")) || promos.contains_key(&format!("{mc}-latest")))
+        .map(|(mc, _)| mc.clone()).collect();
+    out.sort_by(|a, b| cmp_version_str(b, a));
+    Ok(out)
+}
+
 fn neo_versions() -> Res<Vec<String>> {
     let v = get_json("https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge")?;
     Ok(v["versions"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect())
@@ -115,6 +163,12 @@ fn neo_versions() -> Res<Vec<String>> {
 
 fn forge_promos() -> Res<Map<String, Value>> {
     Ok(get_json("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")?["promos"].as_object().cloned().unwrap_or_default())
+}
+
+/// Download a maven-hosted installer into `dir`, checking it against the `.sha1` the repository publishes next to it.
+pub fn download_checked_installer(url: &str, dir: &Path, filename: &str) -> Res<String> {
+    let expected = get_text(&format!("{url}.sha1")).ok().and_then(|t| t.split_whitespace().next().map(String::from));
+    download_file(url, dir, filename, expected.as_ref().map(|_| "sha1"), expected.as_deref())
 }
 
 pub fn installer_info(loader: &str, mc: &str, version: Option<&str>) -> Res<(String, String)> {
@@ -130,9 +184,7 @@ pub fn installer_info(loader: &str, mc: &str, version: Option<&str>) -> Res<(Str
     let pre = neo_prefix(mc);
     let cands: Vec<String> = neo_versions()?.into_iter().filter(|v| v.starts_with(&pre)).collect();
     if cands.is_empty() { return Err(format!("NeoForge isn't available for Minecraft {mc}.")); }
-    let stable: Vec<&String> = cands.iter().filter(|c| !c.contains('-')).collect();
-    let pool: Vec<&String> = if stable.is_empty() { cands.iter().collect() } else { stable };
-    let v = pool.into_iter().max_by_key(|c| vkey(c)).unwrap().clone();
+    let v = neo_best(&cands).ok_or_else(|| format!("NeoForge isn't available for Minecraft {mc}."))?;
     let u = installer_url(loader, mc, &v);
     Ok((v, u))
 }
@@ -155,7 +207,7 @@ pub fn loader_versions(loader: &str, mc: &str) -> Res {
         let rec = promos.get(&format!("{mc}-recommended")).and_then(|v| v.as_str()).map(String::from);
         let lat = promos.get(&format!("{mc}-latest")).and_then(|v| v.as_str()).map(String::from);
         names.extend(rec.iter().cloned().chain(lat.iter().cloned()));
-        names.sort_by(|a, b| vkey(b).cmp(&vkey(a)));
+        names.sort_by(|a, b| cmp_version_str(b, a));
         names.dedup();
         if names.is_empty() { return Err(format!("Forge isn't available for Minecraft {mc}.")); }
         return Ok(json!({"versions": names, "stable": rec.unwrap_or_else(|| names[0].clone()), "latest": names[0]}));
@@ -163,9 +215,9 @@ pub fn loader_versions(loader: &str, mc: &str) -> Res {
     if mc == "1.20.1" { return Err("NeoForge starts at Minecraft 1.20.2. Use Forge for 1.20.1.".into()); }
     let pre = neo_prefix(mc);
     let mut names: Vec<String> = neo_versions()?.into_iter().filter(|v| v.starts_with(&pre)).collect();
-    names.sort_by(|a, b| vkey(b).cmp(&vkey(a)));
+    names.sort_by(|a, b| cmp_version_str(b, a));
     if names.is_empty() { return Err(format!("NeoForge isn't available for Minecraft {mc}.")); }
-    let stable = names.iter().find(|v| !v.contains('-')).cloned().unwrap_or_else(|| names[0].clone());
+    let stable = neo_best(&names).unwrap_or_else(|| names[0].clone());
     Ok(json!({"versions": names, "stable": stable, "latest": names[0]}))
 }
 
@@ -207,8 +259,7 @@ pub fn installer_profile(loader: &str, mc: &str, root: &Path, version: Option<&s
     let tmp = std::env::temp_dir().join(format!("orbit-installer-{:08x}", rand::random::<u32>()));
     std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
     let res = (|| -> Res<(Value, String)> {
-        let expected = get_text(&format!("{url}.sha1")).ok().and_then(|t| t.split_whitespace().next().map(String::from));
-        let jar = download_file(&url, &tmp, url.rsplit('/').next().unwrap(), expected.as_ref().map(|_| "sha1"), expected.as_deref())?;
+        let jar = download_checked_installer(&url, &tmp, url.rsplit('/').next().unwrap())?;
         std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
         let lp = root.join("launcher_profiles.json");
         if !lp.exists() { std::fs::write(&lp, r#"{"profiles": {}}"#).map_err(|e| e.to_string())?; }
@@ -253,5 +304,22 @@ mod tests {
         assert_eq!(forge_full("1.12.2", "14.23.5.2860"), "1.12.2-14.23.5.2860");
         assert_eq!(forge_full("1.7.10", "10.13.4.1614"), "1.7.10-10.13.4.1614-1.7.10");
         assert_eq!(forge_full("1.20.1", "47.3.0"), "1.20.1-47.3.0");
+    }
+
+    #[test]
+    fn loader_compatibility_is_defined_once() {
+        assert_eq!(runs("quilt"), ["quilt", "fabric"]);
+        assert_eq!(runs("neoforge"), ["neoforge"]);
+        assert_eq!(LOADER_PRIORITY, ["neoforge", "forge", "fabric", "quilt"]);
+    }
+
+    #[test]
+    fn neoforge_prefers_stable_and_betas_only_as_a_fallback() {
+        let v = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(neo_best(&v(&["21.1.9", "21.1.10", "21.1.11-beta"])).as_deref(), Some("21.1.10"));
+        assert_eq!(neo_best(&v(&["21.0.0-beta", "21.0.2-beta"])).as_deref(), Some("21.0.2-beta"));
+        assert_eq!(neo_best(&v(&["21.1.0-beta", "21.1.0-alpha.1"])).as_deref(), Some("21.1.0-beta"));
+        assert_eq!(neo_best(&[]), None);
+        assert_eq!((neo_mc("21.1.5"), neo_mc("20.4.0"), neo_mc("26.1.0.3-beta")), ("1.21.1".to_string(), "1.20.4".to_string(), "26.1".to_string()));
     }
 }

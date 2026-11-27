@@ -1,6 +1,6 @@
 ; Orbit installer. Installs for the current user only: NO administrator rights / UAC prompt.
 ; Build with Inno Setup 6 (free):  iscc /DAppVersion=0.2.0 installer\orbit.iss   (build_windows.bat does this and
-; reads the version from Cargo.toml, so the installer and the exe always agree). Run `cargo build --release` first.
+; reads the version from Cargo.toml, so the installer and the exe always agree). Run `build_windows.bat release` (or `cargo build --release`) first.
 ; Player data (%APPDATA%\Orbit) is deliberately left in place on uninstall.
 #define AppName "Orbit"
 #ifndef AppVersion

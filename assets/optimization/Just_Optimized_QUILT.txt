@@ -1,6 +1,6 @@
 # Just Optimized (QUILT) - mod list for Orbit's "Add Optimization".
-# Quilt loads Fabric mods, so this is the Fabric list. No `minecraft` line on purpose: Quilt has no fixed
-# target version here, so the newest game version Quilt itself supports is used as the ceiling.
+# Quilt loads Fabric mods, so this is the Fabric list. No `minecraft` line on purpose: the ceiling is the
+# newest game version where Quilt exists and Sodium and Lithium both have a build.
 # One mod name per line. Orbit finds each one on Modrinth, then picks its newest release for the instance's
 # exact game version and loader; a mod with no such build is skipped. Best first.
 

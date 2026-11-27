@@ -4,9 +4,9 @@ The Orbit UI (`ui/index.html`) served from a Rust backend inside a native window
 WebKitGTK on Linux). The data folder format is unchanged, so existing instances/settings carry over.
 
 ## Build
-- Windows: `build_windows.bat` -> `dist\Orbit.exe` (portable) and `dist\Orbit-Setup.exe` (needs Rust, and Inno Setup 6 for the installer).
+- Windows: `build_windows.bat release` -> `dist\Orbit.exe` (portable) and `dist\Orbit-Setup.exe` (needs Rust, and Inno Setup 6 for the installer). Without an argument it makes a quick `--profile fast` build of `orbit` only (`target\fast\orbit.exe`).
   The installer's version is read from `Cargo.toml`, so it always matches the exe.
-- Linux: `./build_linux.sh` -> `dist/Orbit-linux.tar.gz`, then `./install.sh` (no sudo)
+- Linux: `./build_linux.sh release` -> `dist/Orbit-linux.tar.gz`, then `./install.sh` (no sudo). Without an argument it makes a quick `--profile fast` build of `orbit` only (`target/fast/orbit`); links with mold or lld when installed.
 
 ## Installer
 `installer/orbit.iss` uses `PrivilegesRequired=lowest`: installs to `%LOCALAPPDATA%\Programs\Orbit`,
@@ -22,7 +22,7 @@ the files (keeping `orbit.exe.old` / `orbit.old` as a backup, restoring it if an
   it, or the `DEFAULT_SOURCE` constant in `src/bin/orbit-updater.rs`. A source is `github:owner/repo` (latest release; assets
   `Orbit-windows.zip` or `Orbit.exe`, `Orbit-linux.tar.gz`; a `.sha256` asset or GitHub's own digest is used to verify) or the URL
   of a manifest: `{"version": "0.3.0", "notes": "...", "assets": {"windows": {"url": "...", "sha256": "..."}, "linux": {...}}}`.
-- Copy `updater.json.example` to `updater.json` (project root) and fill in your repo; the build scripts and installer ship it next to the updater.
+- Put an `updater.json` in the project root (it ships with your repo) and the build scripts and installer ship it next to the updater.
   Without any source the updater says so and does nothing. `GITHUB_TOKEN` is used if set (avoids GitHub's anonymous rate limit).
 - **In-app button:** Settings > About Orbit > "Check for updates" (then "Update now"). Orbit runs `orbit-updater --check --json`
   (`/api/update/check`), shows the version and release notes, and on "Update now" starts `orbit-updater --yes --wait-pid <orbit>`
@@ -102,11 +102,14 @@ current theme (7:1 in high contrast). Stored as the `accent` and `high_contrast`
 
 ## Add Optimization (Custom setup)
 
-Tick **Add Optimization** when creating a Fabric or NeoForge instance and Orbit adds performance mods after creating it.
+Tick **Add Optimization** when creating a Fabric, NeoForge, Quilt or Forge instance and Orbit adds performance mods after creating it.
 
-- **Target version and older.** Per loader, the ceiling is the `dependencies.minecraft` declared in the reference packs in
-  `assets/optimization/*.txt` (plain-text mod lists for Fabric, NeoForge, Quilt and Forge, embedded at build time; the game version, loader and each mod's name are read; Quilt and Forge declare no version, so their ceiling is the newest version the loader supports). The option works for that release version and
-  any release below it, and the API enforces this too. A mod is added only if Modrinth has a build for that exact version and
+- **Target version and older.** Every loader follows one rule: the ceiling is the newest game version where the loader exists
+  and at least two anchor mods have a build (Forge: Embeddium, ModernFix; Quilt and Fabric: Sodium, Lithium; NeoForge: Sodium,
+  ModernFix); all Minecraft versions are searched, and if none qualifies the option says so. A `minecraft = ...` line in a list in
+  `assets/optimization/*.txt` (plain-text mod lists for Fabric, NeoForge, Quilt and Forge, embedded at build time) only overrides that
+  rule; today only the Fabric list has one. The option works for the ceiling version and any release version below it, and the API
+  enforces this too. A mod is added only if Modrinth has a build for that exact version and
   loader; otherwise it is skipped together with any libraries that were only needed for it.
 - **Per-mod lookup.** Each mod name in the loader's text list is looked up on Modrinth (by slug, then by search; it must exist), then Modrinth is asked for
   its builds for the instance's exact game version and loader (Quilt also accepts Fabric builds). The newest release is used
@@ -116,4 +119,4 @@ Tick **Add Optimization** when creating a Fabric or NeoForge instance and Orbit 
 - **Never blocks creation.** The instance is always created; if Modrinth is unreachable or nothing fits, the reply's
   `optimization` object carries `error`, `skipped` and `warnings`, and the UI shows them.
 
-API: `GET /api/optimization` -> `{loaders, ceilings}`; `POST /api/instances` accepts `"optimize": true`.
+API: `GET /api/optimization` -> `{loaders, ceilings, errors}` (`errors` says why a loader has no ceiling); `POST /api/instances` accepts `"optimize": true`.

@@ -34,7 +34,17 @@ use tao::window::WindowBuilder;
 #[cfg(feature = "gui")]
 use wry::WebViewBuilder;
 
-const INDEX_HTML: &str = include_str!("../ui/index.html");
+static INDEX_GZ: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/index.html.gz"));
+
+/// The UI page, inflated once from the gzipped copy build.rs embeds.
+fn index_html() -> &'static str {
+    static HTML: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    HTML.get_or_init(|| {
+        let mut s = String::new();
+        let _ = std::io::Read::read_to_string(&mut flate2::read::GzDecoder::new(INDEX_GZ), &mut s);
+        s
+    })
+}
 
 fn query(raw: &str) -> HashMap<String, String> {
     let dec = |s: &str| percent_encoding::percent_decode_str(&s.replace('+', " ")).decode_utf8_lossy().into_owned();
@@ -68,7 +78,7 @@ fn handle(mut req: tiny_http::Request, token: &str) {
     let q = query(qs);
 
     if method == "GET" && path == "/" {
-        let html = INDEX_HTML.replace("__TOKEN__", token);
+        let html = index_html().replace("__TOKEN__", token);
         return respond(req, 200, html.into_bytes(), "text/html; charset=utf-8");
     }
 

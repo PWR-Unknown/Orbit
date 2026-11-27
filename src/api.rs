@@ -405,16 +405,29 @@ fn duplicate_instance(src: &store::Instance, iid: &str) -> Res {
 
 fn create_instance(name: &str, mc: &str, loader: &str, lv: &str) -> Res { Ok(store::summary(&create_instance_raw(name, mc, loader, lv)?)) }
 
-/// loader -> the one game version "Add Optimization" works for (see optimization.rs).
-fn optimization_ceilings() -> std::collections::BTreeMap<String, String> {
-    optimization::ceilings(|loader| {
-        let vs = game_versions(false).ok()?;
-        vs["versions"].as_array()?.iter().filter_map(|v| v.as_str()).take(10)
-            .find(|mc| loader_versions(loader, mc).is_ok()).map(String::from)
-    })
+/// loader -> the highest game version "Add Optimization" works for, up to and including (see optimization.rs), or why there is none.
+/// Looking it up takes a few Modrinth requests per loader, so the answer is kept for a while.
+fn optimization_ceilings() -> optimization::Ceilings {
+    static CACHE: Mutex<Option<(Instant, optimization::Ceilings)>> = Mutex::new(None);
+    if let Some((t, c)) = CACHE.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        // a failed lookup (offline, nothing found) is retried sooner than a good one
+        if t.elapsed().as_secs() < if c.errors.is_empty() { 600 } else { 60 } { return c.clone(); }
+    }
+    let c = optimization::ceilings(|loader| {
+        let vs = game_versions(false)?;
+        let names: Vec<String> = vs["versions"].as_array().into_iter().flatten().filter_map(|v| v.as_str().map(String::from)).collect();
+        let anchors = optimization::anchor_game_versions(loader)?;
+        optimization::newest_with_anchors(loader, &names, &anchors, |mc| match loader_versions(loader, mc) {
+            Ok(_) => Ok(true),
+            Err(e) if e.contains("isn't available") || e.contains("starts at Minecraft") => Ok(false),
+            Err(e) => Err(e),
+        })
+    });
+    *CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), c.clone()));
+    c
 }
 
-fn optimization_info() -> Res { Ok(json!({"loaders": optimization::SUPPORTED, "ceilings": optimization_ceilings()})) }
+fn optimization_info() -> Res { let c = optimization_ceilings(); Ok(json!({"loaders": optimization::SUPPORTED, "ceilings": c.versions, "errors": c.errors})) }
 
 /// Custom setup with "Add Optimization" ticked. The rule is enforced here, before anything is created; after
 /// that the instance always exists and the optimization outcome (ok / error / skipped) rides along in the reply.
@@ -492,8 +505,7 @@ fn toggle_content(inst: &mut store::Instance, key: &str) -> Result<(), String> {
 
 fn list_files(inst: &store::Instance, rel: &str) -> Res {
     let base = inst.root.canonicalize().unwrap_or(inst.root.clone());
-    let d = if rel.is_empty() { base.clone() } else { base.join(rel).canonicalize().unwrap_or_else(|_| base.join(rel)) };
-    if d != base && !d.starts_with(&base) { return Err("bad path".into()); }
+    let d = crate::util::resolve_in(&inst.root, rel, "instance")?;
     if !d.is_dir() { return Ok(json!({"path": rel, "entries": []})); }
     let mut out: Vec<Value> = vec![];
     for e in std::fs::read_dir(&d).map_err(|e| e.to_string())?.flatten() {
@@ -711,7 +723,7 @@ fn create_from_project(task: &Option<String>, source: &str, ident: &str, ptype: 
     let title = s(&meta, "title").to_string();
     let loaders: Vec<&str> = meta["loaders"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).collect();
     let loader = if ptype == "mod" {
-        ["fabric", "neoforge", "forge", "quilt"].into_iter().find(|l| loaders.contains(l)).ok_or_else(|| format!("{title} doesn't support a loader Orbit can run."))?
+        meta::LOADER_PRIORITY.into_iter().find(|l| loaders.contains(l)).ok_or_else(|| format!("{title} doesn't support a loader Orbit can run."))?
     } else { "fabric" };
     let params: Vec<(&str, String)> = if ptype == "mod" { vec![("loaders", mods::jl(&[loader]))] } else { vec![] };
     let vers = mods::api_get(&format!("/project/{}/version", s(&meta, "id")), &params)?;
@@ -977,7 +989,8 @@ fn instance_action(r: &Req, iid: &str, act: &str) -> Result<Out, String> {
             if !inst.state["settings"].is_object() { inst.state["settings"] = json!({}); }
             if b.get("memory").is_some() {
                 let mem = ms(&b["memory"]).unwrap_or(0);
-                if mem != 0 && !(512..=65536).contains(&mem) { return Err("Memory should be between 512 and 65536 MB.".into()); }
+                let max = crate::util::max_game_memory_mb();
+                if mem != 0 && !(512..=max).contains(&mem) { return Err(format!("Memory should be between 512 and {max} MB (the memory in this computer).")); }
                 inst.state["settings"]["memory"] = json!(mem);
             }
             if let Some(a) = b["jvm_args"].as_str() { inst.state["settings"]["jvm_args"] = json!(a.trim().chars().take(500).collect::<String>()); }

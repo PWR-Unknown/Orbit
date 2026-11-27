@@ -1,40 +1,34 @@
 # Just Optimized (NEOFORGE) - mod list for Orbit's "Add Optimization".
+# No `minecraft` line: NeoForge follows the same rule as the other loaders (the newest game version where NeoForge exists
+# and at least two anchor mods have a build; a `minecraft = ...` line would only override that).
 # One mod name per line. Orbit finds each one on Modrinth, then picks its newest release for the instance's
 # exact game version and loader; a mod with no such build is skipped. Best first.
 
-neoforge = 21.1.266
-minecraft = 1.21.1
+neoforge = any
 
 [mods]
 BadOptimizations
 Better Render Distance
 ImmediatelyFast
-Ixeris
-KotlinLangForge
 Kotlin for Forge
 ScalableLux
 STFU
 AsyncLogger
 Better Block Entities
 Better Biome Blend
-C2ME
 Cloth Config
 Entity Culling
-Fabric API
-Fabric Language Kotlin
 FastQuit
 FerriteCore
 Fzzy Config
-Krypton
 Language Reload
-Lithium
 ModernFix
-Mod Menu
 More Culling
 Particle Core
 Placeholder API
 Resourceful Config
+Reese's Sodium Options
+Sodium Extra
 Sodium
-VMP
 YACL
 zconfig

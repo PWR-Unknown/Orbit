@@ -1397,9 +1397,9 @@ async function customStep(){
   ed=iconEditor($("#ied"));
   $("#cc").onclick=createModal;
   const ph=()=>{$("#cn").placeholder=dflt();drawOpt()};
-  /* "Add Optimization" works for the loaders in GET /optimization on game versions up to its ceiling the optimization set targets (GET /optimization). Returns why it's off, or "" when usable. */
+  /* "Add Optimization" works for the loaders in GET /optimization on game versions up to and including its ceiling (GET /optimization). Returns why it's off, or "" when usable. */
   const optWhy=()=>{if(!OPT)return OPTERR||"Checking availability...";if(!OPT.loaders.includes(loader))return "Available for "+OPT.loaders.map(l=>LOADERS[l]).join(", ")+" instances.";
-    const c=OPT.ceilings[loader];if(!c)return `Not available for ${LOADERS[loader]} right now.`;
+    const c=OPT.ceilings[loader];if(!c)return (OPT.errors&&OPT.errors[loader])||`Not available for ${LOADERS[loader]} right now.`;
     return /^\d+(\.\d+)*$/.test(mc)&&vcmp(mc,c)<=0?"":`Available for ${LOADERS[loader]} releases up to Minecraft ${c}. Pick ${c} or older to turn it on.`};
   function drawOpt(){const why=optWhy(),el=$("#opt");if(!el)return;if(why)opt=false;
     el.checked=opt;el.disabled=!!why;$("#optl").style.opacity=why?".55":"";$("#optl").style.cursor=why?"default":"";

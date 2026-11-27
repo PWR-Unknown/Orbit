@@ -24,7 +24,8 @@ pub fn type_class(t: &str) -> i64 { TYPES.iter().find(|x| x.0 == t).map(|x| x.2)
 pub fn is_type(t: &str) -> bool { TYPES.iter().any(|x| x.0 == t) }
 pub fn dir_type(d: &str) -> Option<&'static str> { TYPES.iter().find(|x| !x.1.is_empty() && x.1 == d).map(|x| x.0) }
 
-pub const MRPACK_LOADERS: [(&str, &str); 4] = [("fabric-loader", "fabric"), ("quilt-loader", "quilt"), ("forge", "forge"), ("neoforge", "neoforge")];
+/// Quilt is listed before Fabric on purpose: a pack that declares both `quilt-loader` and `fabric-loader` is a Quilt pack.
+pub const MRPACK_LOADERS: [(&str, &str); 4] = [("quilt-loader", "quilt"), ("fabric-loader", "fabric"), ("forge", "forge"), ("neoforge", "neoforge")];
 
 pub type Log = Vec<String>;
 
@@ -78,10 +79,12 @@ pub fn best_version(project: &str, mc: &str, loader: Option<&str>) -> Res<Option
         arr.sort_by(|a, b| b["date_published"].as_str().unwrap_or("").cmp(a["date_published"].as_str().unwrap_or("")));
         Ok(Some(arr.iter().find(|x| x["version_type"] == "release").unwrap_or(&arr[0]).clone()))
     };
-    let r = one(loader)?;
-    // Quilt loads Fabric mods, and most mods are only tagged Fabric on Modrinth
-    if r.is_none() && loader == Some("quilt") { return one(Some("fabric")); }
-    Ok(r)
+    // Try each loader this one can run, best first (Quilt loads Fabric mods, and most mods are only tagged Fabric on Modrinth)
+    let Some(l) = loader else { return one(None) };
+    let order = crate::meta::runs(l);
+    if order.is_empty() { return one(Some(l)); }
+    for r in order { if let Some(v) = one(Some(r))? { return Ok(Some(v)); } }
+    Ok(None)
 }
 
 fn primary_file(v: &Value) -> Option<&Value> {

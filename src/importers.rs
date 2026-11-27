@@ -11,7 +11,6 @@ use std::path::{Path, PathBuf};
 
 const SETTING_FILES: [&str; 4] = ["options.txt", "optionsof.txt", "optionsshaders.txt", "servers.dat"];
 pub const ICON_TYPES: [(&str, &str); 6] = [(".png", "image/png"), (".jpg", "image/jpeg"), (".jpeg", "image/jpeg"), (".webp", "image/webp"), (".gif", "image/gif"), (".svg", "image/svg+xml")];
-const LOADER_ORDER: [&str; 4] = ["neoforge", "forge", "fabric", "quilt"];
 
 pub fn icon_type(p: &Path) -> Option<&'static str> {
     let e = format!(".{}", p.extension()?.to_string_lossy().to_lowercase());
@@ -43,7 +42,7 @@ fn ts(v: &Value) -> f64 {
 
 fn mem(v: &Value) -> i64 {
     let n = v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).unwrap_or(0);
-    if (512..=65536).contains(&n) { n } else { 0 }
+    if (512..=crate::util::max_game_memory_mb()).contains(&n) { n } else { 0 }
 }
 
 fn jload(v: &Value, default: Value) -> Value {
@@ -200,7 +199,7 @@ fn infer(d: &Path) -> (String, String) {
     let mut loader = votes.iter().max_by_key(|(_, c)| **c).map(|(l, _)| l.to_string()).unwrap_or_default();
     let name = d.file_name().unwrap_or_default().to_string_lossy().to_string();
     let low = name.to_lowercase();
-    if let Some(l) = LOADER_ORDER.iter().find(|l| low.contains(*l)) { loader = l.to_string(); }
+    if let Some(l) = crate::meta::LOADER_PRIORITY.iter().find(|l| low.contains(*l)) { loader = l.to_string(); }
     let mc = Regex::new(r"(?:^|[^\d.])(\d{1,2}\.\d{1,2}(?:\.\d{1,2})?)(?:$|[^\d])").unwrap().captures(&name).map(|c| c[1].to_string())
         .or_else(|| mcs.iter().max_by_key(|(_, c)| **c).map(|(v, _)| v.clone())).unwrap_or_default();
     (mc, loader)
@@ -270,7 +269,7 @@ pub fn scan_curseforge(folder: &Path) -> Res<Vec<Value>> {
         let Some(j) = d.is_dir().then(|| read_json(&d.join("minecraftinstance.json"))).flatten().filter(|v| v.is_object()) else { continue };
         let bl = &j["baseModLoader"];
         let lname = bl["name"].as_str().unwrap_or("").to_lowercase();
-        let loader = LOADER_ORDER.iter().find(|l| lname.starts_with(*l)).map(|l| l.to_string())
+        let loader = crate::meta::LOADER_PRIORITY.iter().find(|l| lname.starts_with(*l)).map(|l| l.to_string())
             .or_else(|| match bl["type"].as_i64() { Some(1) => Some("forge"), Some(4) => Some("fabric"), Some(5) => Some("quilt"), Some(6) => Some("neoforge"), _ => None }.map(String::from)).unwrap_or_default();
         let lv = bl["forgeVersion"].as_str().filter(|s| !s.is_empty()).map(String::from).unwrap_or_else(|| lname.split_once('-').map(|x| x.1.to_string()).unwrap_or_default());
         let mc = bl["minecraftVersion"].as_str().or(j["gameVersion"].as_str()).unwrap_or("");
@@ -602,7 +601,7 @@ pub fn tl_scan(root: &Path) -> Vec<Value> {
         let mem = if mp["modpackMemory"] == true { mp["memory"].as_i64().unwrap_or(0) } else { 0 };
         let sources = find_sources(root, &id, &name);
         out.push(json!({"id": id, "name": name, "mc": mc, "loader": loader, "loader_version": lv, "modpack": side.is_some(),
-            "memory": if (512..=65536).contains(&mem) { mem } else { 0 }, "sources": sources}));
+            "memory": if (512..=crate::util::max_game_memory_mb()).contains(&mem) { mem } else { 0 }, "sources": sources}));
     }
     out
 }

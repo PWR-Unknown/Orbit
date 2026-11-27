@@ -9,7 +9,7 @@
 //! The same inventory feeds the crash diagnostics (`diagnose.rs`).
 use crate::mods::api_get;
 use crate::mods::Log;
-use crate::util::Res;
+use crate::util::{parse_ver, Res, Ver};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read, Seek};
@@ -250,26 +250,7 @@ pub fn scan_dir(dir: &Path) -> Vec<ModInfo> {
 
 // ---------------------------------------------------------------- versions and ranges
 
-fn parse_ver(s: &str) -> Option<Vec<u64>> {
-    let s = s.trim().trim_start_matches(['v', 'V']);
-    if !s.starts_with(|c: char| c.is_ascii_digit()) { return None; }
-    let head = s.split(['+', '-', '_', ' ']).next().unwrap_or("");
-    let mut out = vec![];
-    for part in head.split('.') {
-        match part.parse::<u64>() { Ok(n) => out.push(n), Err(_) => break }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
-pub fn cmp_ver(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
-    for i in 0..a.len().max(b.len()) {
-        let (x, y) = (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0));
-        if x != y { return x.cmp(&y); }
-    }
-    std::cmp::Ordering::Equal
-}
-
-fn single_range(r: &str, v: &[u64]) -> Option<bool> {
+fn single_range(r: &str, v: &Ver) -> Option<bool> {
     let r = r.trim();
     if r.is_empty() || r == "*" || r.eq_ignore_ascii_case("x") { return Some(true); }
     if r.starts_with(['[', '(']) { // Maven: [1.20,1.21) (,1.21) [1.20.1]
@@ -280,10 +261,10 @@ fn single_range(r: &str, v: &[u64]) -> Option<bool> {
             let (lo_inc, hi_inc) = (s.starts_with('['), s.ends_with(']'));
             let inner = &s[1..s.len() - 1];
             let ok = match inner.split_once(',') {
-                None => parse_ver(inner).map(|x| cmp_ver(v, &x) == std::cmp::Ordering::Equal)?,
+                None => parse_ver(inner).map(|x| v.cmp(&x) == std::cmp::Ordering::Equal)?,
                 Some((lo, hi)) => {
-                    let lo_ok = if lo.trim().is_empty() { true } else { let x = parse_ver(lo)?; let c = cmp_ver(v, &x); c == std::cmp::Ordering::Greater || (lo_inc && c == std::cmp::Ordering::Equal) };
-                    let hi_ok = if hi.trim().is_empty() { true } else { let x = parse_ver(hi)?; let c = cmp_ver(v, &x); c == std::cmp::Ordering::Less || (hi_inc && c == std::cmp::Ordering::Equal) };
+                    let lo_ok = if lo.trim().is_empty() { true } else { let x = parse_ver(lo)?; let c = v.cmp(&x); c == std::cmp::Ordering::Greater || (lo_inc && c == std::cmp::Ordering::Equal) };
+                    let hi_ok = if hi.trim().is_empty() { true } else { let x = parse_ver(hi)?; let c = v.cmp(&x); c == std::cmp::Ordering::Less || (hi_inc && c == std::cmp::Ordering::Equal) };
                     lo_ok && hi_ok
                 }
             };
@@ -298,13 +279,13 @@ fn single_range(r: &str, v: &[u64]) -> Option<bool> {
         let rest_t = rest.trim_end_matches(".x").trim_end_matches(".*").trim_end_matches(".X");
         let wild = rest_t.len() != rest.len();
         let x = parse_ver(rest_t)?;
-        let c = cmp_ver(v, &x);
+        let c = v.cmp(&x);
         use std::cmp::Ordering::*;
         let ok = match op {
             ">=" => c != Less, ">" => c == Greater, "<=" => c != Greater, "<" => c == Less,
-            "~" => { let mut hi = x.clone(); if hi.len() >= 2 { hi.truncate(2); hi[1] += 1; } else { hi = vec![hi[0] + 1]; } c != Less && cmp_ver(v, &hi) == Less }
-            "^" => { let mut hi = vec![x[0] + 1]; if x[0] == 0 && x.len() > 1 { hi = vec![0, x[1] + 1]; } c != Less && cmp_ver(v, &hi) == Less }
-            _ if wild => { v.iter().zip(x.iter()).all(|(a, b)| a == b) && v.len() >= x.len() }
+            "~" => { let mut hi = x.nums.clone(); if hi.len() >= 2 { hi.truncate(2); hi[1] += 1; } else { hi = vec![hi[0] + 1]; } c != Less && v.cmp(&Ver::release(hi)) == Less }
+            "^" => { let mut hi = vec![x.nums[0] + 1]; if x.nums[0] == 0 && x.nums.len() > 1 { hi = vec![0, x.nums[1] + 1]; } c != Less && v.cmp(&Ver::release(hi)) == Less }
+            _ if wild => { v.nums.iter().zip(x.nums.iter()).all(|(a, b)| a == b) && v.nums.len() >= x.nums.len() }
             _ => c == Equal,
         };
         if !ok { return Some(false); }
@@ -339,7 +320,7 @@ impl Ctx {
     pub fn is_plugin_host(&self) -> bool { matches!(self.platform.as_str(), "paper" | "purpur" | "folia" | "spigot" | "velocity" | "bukkit") }
     fn allowed(&self) -> &'static [&'static str] {
         match self.platform.as_str() {
-            "fabric" => &["fabric"], "quilt" => &["quilt", "fabric"], "forge" => &["forge"], "neoforge" => &["neoforge", "forge"],
+            "fabric" | "quilt" | "forge" | "neoforge" => crate::meta::runs(self.platform.as_str()),
             "paper" | "purpur" | "folia" | "spigot" | "bukkit" => &["bukkit", "paper"], "velocity" => &["velocity"], _ => &[],
         }
     }
@@ -434,7 +415,7 @@ pub fn analyze(inv: &[ModInfo], ctx: &Ctx) -> Report {
         }
         if !m.api_version.is_empty() {
             if let (Some(api), Some(mc)) = (parse_ver(&m.api_version), &mc_ver) {
-                if cmp_ver(&api[..api.len().min(2)], &mc[..mc.len().min(2)]) == std::cmp::Ordering::Greater { rep.api_too_new.push((m.file.clone(), m.api_version.clone())); }
+                if crate::util::cmp_nums(&api.nums[..api.nums.len().min(2)], &mc.nums[..mc.nums.len().min(2)]) == std::cmp::Ordering::Greater { rep.api_too_new.push((m.file.clone(), m.api_version.clone())); }
             }
         }
         if ctx.platform == "folia" && m.platforms.iter().any(|p| *p == "bukkit" || *p == "paper") && m.folia != Some(true) { rep.folia_unsupported.push(m.file.clone()); }

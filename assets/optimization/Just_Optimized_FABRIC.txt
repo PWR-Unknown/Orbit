@@ -1,6 +1,8 @@
 # Just Optimized (FABRIC) - mod list for Orbit's "Add Optimization".
 # One mod name per line. Orbit finds each one on Modrinth, then picks its newest release for the instance's
 # exact game version and loader; a mod with no such build is skipped. Best first.
+# The `minecraft` line below is an override of the ceiling; without it the ceiling is the newest game version where Fabric
+# exists and Sodium and Lithium both have a build.
 
 fabric-loader = 0.20.1
 minecraft = 26.3

@@ -1,6 +1,8 @@
 @echo off
 setlocal
-REM Builds orbit.exe and the no-admin installer. Needs Rust (https://rustup.rs) and, for the installer, Inno Setup 6.
+REM   build_windows.bat           fast build of orbit.exe only (target\fast\orbit.exe), for everyday work
+REM   build_windows.bat release   full optimised build of orbit.exe + orbit-updater.exe and the no-admin installer
+REM Needs Rust (https://rustup.rs) and, for the installer, Inno Setup 6.
 cd /d "%~dp0"
 
 where cargo >nul 2>nul
@@ -17,7 +19,20 @@ set "VER=%VER: =%"
 set "VER=%VER:"=%"
 if "%VER%"=="" set "VER=0.0.0"
 
-cargo build --release
+if /i not "%~1"=="release" (
+  cargo build --profile fast --bin orbit
+  if errorlevel 1 (
+    echo BUILD FAILED
+    pause
+    exit /b 1
+  )
+  echo.
+  echo Fast build: target\fast\orbit.exe   ^(run "build_windows.bat release" for the installer build^)
+  pause
+  exit /b 0
+)
+
+cargo build --release --bin orbit --bin orbit-updater
 if errorlevel 1 (
   echo BUILD FAILED
   pause

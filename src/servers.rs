@@ -142,16 +142,6 @@ pub fn content_kind(root: &Path, egg: &str) -> Option<&'static str> {
     None
 }
 
-fn neo_mc(v: &str) -> String {
-    let head = v.split('-').next().unwrap_or("");
-    let parts: Vec<&str> = head.split('.').collect();
-    match parts[0].parse::<i64>() {
-        Ok(n) if n < 26 => format!("1.{}{}", parts[0], if parts.len() > 1 && parts[1] != "0" { format!(".{}", parts[1]) } else { String::new() }),
-        Ok(_) => parts.iter().take(2).copied().collect::<Vec<_>>().join("."),
-        Err(_) => String::new(),
-    }
-}
-
 fn guess_mc(root: &Path, cfg: &Value) -> String {
     if let Some(m) = cfg["mc"].as_str().filter(|m| !m.is_empty()) { return m.into(); }
     if let Ok(f) = std::fs::File::open(root.join("logs").join("latest.log")) {
@@ -166,13 +156,13 @@ fn guess_mc(root: &Path, cfg: &Value) -> String {
     let neo = root.join("libraries/net/neoforged/neoforge");
     if neo.is_dir() {
         let mut vs = list_names(&neo);
-        vs.sort_by_key(|v| meta::vkey(v));
-        if let Some(v) = vs.last() { return neo_mc(v); }
+        vs.sort_by(|a, b| util::cmp_version_str(a, b));
+        if let Some(v) = vs.last() { return meta::neo_mc(v); }
     }
     let srv = root.join("libraries/net/minecraft/server");
     if srv.is_dir() {
         let mut vs = list_names(&srv);
-        vs.sort_by_key(|v| meta::vkey(v));
+        vs.sort_by(|a, b| util::cmp_version_str(a, b));
         if let Some(v) = vs.last() { return v.split('-').next().unwrap_or("").into(); }
     }
     String::new()
@@ -415,8 +405,11 @@ fn set_label(msg: &str) { if let Some(t) = util::track() { t.lock().unwrap_or_el
 
 /// Java for a Minecraft version: the user's pick, else Mojang's runtime for that version, else system Java.
 fn get_java(mc: &str, cfg_java: &str) -> Res<String> {
+    // Unknown Minecraft version: Java 21. A known one whose profile can't be fetched is an error, never an empty profile (that would pick Java 8).
     let mut prof = json!({"javaVersion": {"component": "java-runtime-delta", "majorVersion": 21}});
-    if !mc.is_empty() { prof = meta::vanilla_profile(mc).unwrap_or(json!({})); }
+    if !mc.is_empty() {
+        prof = meta::vanilla_profile(mc).map_err(|e| format!("Couldn't find out which Java Minecraft {mc} needs ({e}). Check your connection and try again."))?;
+    }
     let mut st = store::settings();
     if !cfg_java.is_empty() { st.insert("java_path".into(), json!(cfg_java)); }
     let j = launcher::find_java(&prof, &st, &store::meta_dir(), &|m: &str, _f: f64| set_label(m))?;
@@ -664,7 +657,7 @@ fn papermc_versions(project: &str) -> Res<Vec<String>> {
     let st = rx(r"^\d+(\.\d+)*$");
     let stable: Vec<String> = out.iter().filter(|v| st.is_match(v)).cloned().collect();
     let mut v = if stable.is_empty() { out } else { stable };
-    v.sort_by_key(|x| std::cmp::Reverse(meta::vkey(x)));
+    v.sort_by(|a, b| util::cmp_version_str(b, a));
     Ok(v)
 }
 
@@ -696,20 +689,8 @@ pub fn egg_versions(egg: &str) -> Res {
             let base = if egg == "fabric" { "https://meta.fabricmc.net/v2/versions/game" } else { "https://meta.quiltmc.org/v3/versions/game" };
             util::get_json(base)?.as_array().into_iter().flatten().filter(|v| v["stable"].as_bool().unwrap_or(false)).filter_map(|v| v["version"].as_str().map(String::from)).collect()
         }
-        "forge" => {
-            let m = util::get_json("https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json")?;
-            let mut k: Vec<String> = m.as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
-            k.sort_by_key(|x| std::cmp::Reverse(meta::vkey(x)));
-            k
-        }
-        _ => {
-            let all = util::get_json("https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge")?;
-            let mut set: Vec<String> = all["versions"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).filter(|v| !v.contains('-')).map(neo_mc).filter(|v| !v.is_empty()).collect();
-            set.sort();
-            set.dedup();
-            set.sort_by_key(|x| std::cmp::Reverse(meta::vkey(x)));
-            set
-        }
+        "forge" => meta::forge_game_versions()?,
+        _ => meta::neo_game_versions()?,
     };
     let res = json!({"latest": vs.first().cloned().unwrap_or_default(), "versions": vs});
     VC.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(egg.into(), (Instant::now(), res.clone()));
@@ -773,7 +754,9 @@ fn install_egg(root: &Path, egg: &str, mc: &str, lv: &str) -> Res<Map<String, Va
         }
         "purpur" => {
             let b = util::get_json(&format!("https://api.purpurmc.org/v2/purpur/{mc}/latest"))?["build"].as_str().map(String::from).ok_or("Purpur has no build for that version.")?;
-            download_file(&format!("https://api.purpurmc.org/v2/purpur/{mc}/{b}/download"), root, "server.jar", None, None)?;
+            // The build's own page lists the jar's MD5
+            let md5 = util::get_json(&format!("https://api.purpurmc.org/v2/purpur/{mc}/{b}")).ok().and_then(|j| j["md5"].as_str().map(String::from));
+            download_file(&format!("https://api.purpurmc.org/v2/purpur/{mc}/{b}/download"), root, "server.jar", md5.as_ref().map(|_| "md5"), md5.as_deref())?;
             jar(&mut out, "server.jar");
         }
         "fabric" => {
@@ -789,21 +772,27 @@ fn install_egg(root: &Path, egg: &str, mc: &str, lv: &str) -> Res<Map<String, Va
             out.insert("loader_version".into(), json!(l));
         }
         "quilt" => {
+            // the stable installer (like Fabric's), checked against the .sha1 its maven repository publishes
             let ins = util::get_json("https://meta.quiltmc.org/v3/versions/installer")?;
-            let url = ins[0]["url"].as_str().ok_or("Quilt's installer list is empty right now.")?.to_string();
-            download_file(&url, root, "quilt-installer.jar", None, None)?;
+            let ia = ins.as_array().cloned().unwrap_or_default();
+            let url = ia.iter().find(|x| x["stable"].as_bool().unwrap_or_else(|| !s(x, "version").contains('-'))).or(ia.first())
+                .and_then(|x| x["url"].as_str()).ok_or("Quilt's installer list is empty right now.")?.to_string();
+            meta::download_checked_installer(&url, root, "quilt-installer.jar")?;
+            // pin the loader version so it can be stored (and shown) with the server
+            let l = if lv.is_empty() { meta::loader_versions("quilt", mc)?["stable"].as_str().unwrap_or("").to_string() } else { lv.to_string() };
             let mut args: Vec<String> = vec!["-jar".into(), "quilt-installer.jar".into(), "install".into(), "server".into(), mc.into()];
-            if !lv.is_empty() { args.push(lv.into()); }
+            if !l.is_empty() { args.push(l.clone()); }
             args.extend(["--download-server".into(), "--install-dir=.".into()]);
             let mut cmd = vec![get_java(mc, "")?];
             cmd.extend(args);
             run_cmd(&cmd, root, "Installing Quilt")?;
             let _ = std::fs::remove_file(root.join("quilt-installer.jar"));
             jar(&mut out, "quilt-server-launch.jar");
+            out.insert("loader_version".into(), json!(l));
         }
         "forge" | "neoforge" => {
             let (v, url) = meta::installer_info(egg, mc, if lv.is_empty() { None } else { Some(lv) })?;
-            download_file(&url, root, "installer.jar", None, None)?;
+            meta::download_checked_installer(&url, root, "installer.jar")?;
             run_cmd(&[get_java(mc, "")?, "-jar".into(), "installer.jar".into(), "--installServer".into()], root, &format!("Installing {}", info.name))?;
             let _ = std::fs::remove_file(root.join("installer.jar"));
             let _ = std::fs::remove_file(root.join("installer.jar.log"));
@@ -1682,21 +1671,7 @@ const TEXT_EXT: [&str; 22] = [".properties", ".txt", ".yml", ".yaml", ".json", "
     ".ini", ".xml", ".md", ".sh", ".bat", ".mcmeta", ".csv", ".lang", ".snbt", ".js", ".html"];
 
 /// Resolve `rel` inside the server folder, refusing anything that climbs out of it (including via symlinks).
-fn fpath(root: &Path, rel: &str) -> Res<PathBuf> {
-    let base = root.canonicalize().map_err(|e| e.to_string())?;
-    let mut t = base.clone();
-    for c in Path::new(rel.trim_start_matches(['/', '\\'])).components() {
-        match c {
-            std::path::Component::Normal(p) => t.push(p),
-            std::path::Component::ParentDir => { if !t.pop() || !t.starts_with(&base) { return err("That path is outside the server folder."); } }
-            std::path::Component::CurDir => {}
-            _ => return err("That path is outside the server folder."),
-        }
-    }
-    let t = if t.exists() { t.canonicalize().map_err(|e| e.to_string())? } else { t };
-    if t != base && !t.starts_with(&base) { return err("That path is outside the server folder."); }
-    Ok(t)
-}
+fn fpath(root: &Path, rel: &str) -> Res<PathBuf> { util::resolve_in(root, rel, "server") }
 
 pub fn list_files(name: &str, rel: &str) -> Res {
     let root = server_root(name)?;
