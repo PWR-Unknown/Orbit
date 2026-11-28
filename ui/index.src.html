@@ -73,6 +73,18 @@ html[data-anim=off] *,html[data-anim=off] *::before,html[data-anim=off] *::after
 /* app minimized / unfocused: freeze every running animation */
 /* interactive canvas overlay (Christmas / Halloween, Home + Servers only); the CSS snow layer steps aside while it runs */
 #fx{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:2;display:none}
+#snowpop{position:fixed;z-index:70;width:244px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;padding:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.4);color:var(--text)}
+#snowpop .sph{display:flex;align-items:center;justify-content:space-between;padding:10px 10px 8px 14px;font-weight:700;color:var(--head);font-size:14px}
+#snowpop .spx{border:0;background:none;color:var(--mut);font-size:18px;line-height:1;width:26px;height:26px;border-radius:8px;cursor:pointer}#snowpop .spx:hover{background:var(--btn);color:var(--head)}
+#snowpop .spt{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:0 10px;padding:4px;background:var(--card2);border-radius:11px}
+#snowpop .spt button{border:0;background:none;border-radius:8px;padding:6px 0 5px;cursor:pointer;color:var(--mut);display:grid;gap:1px;justify-items:center;font-size:11px;font-weight:600}
+#snowpop .spt button b{font-size:17px;line-height:1.1;font-weight:400}
+#snowpop .spt button:hover{background:var(--btn);color:var(--head)}#snowpop .spt button.on{background:var(--green);color:var(--onacc,#fff)}
+#snowpop .spo{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px}
+#snowpop .spo button{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:10px;padding:7px 9px;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left;min-width:0}
+#snowpop .spo button:hover{background:var(--btn)}#snowpop .spo button.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;color:var(--head)}
+#snowpop .spo button i{flex:none;width:14px;height:14px;border-radius:50%;border:1px solid rgba(0,0,0,.25)}
+#snowpop .spo button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 html[data-fx=on][data-theme^=christmas]::before{display:none}
 /* split dual-mode theme cards: left half = Light, right half = Dark */
 .th.dual{cursor:default}.th.dual .hv{display:flex}
@@ -485,21 +497,21 @@ const FX=(()=>{
   const R=document.documentElement,cv=document.createElement("canvas"),cx=cv.getContext("2d");
   cv.id="fx";cv.setAttribute("aria-hidden","true");document.body.appendChild(cv);
   const COL=4,CS=5,WEB_SECS=150,rnd=(a,b)=>a+Math.random()*(b-a);
-  let gmax=34,cmax=8,tmax=6.5,spd=1,radm=1;   /* snow limits + fall speed; set from Settings by cfg() */
+  let gmax=34,cmax=8,tmax=6.5,spd=1,radm=1,plowEvery=60,rclick=true;   /* snow limits + fall speed; set from Settings by cfg() */
   let W=0,H=0,mode=null,fam=null,dark=true,raf=0,last=0,t=0,frame=0,flakes=[],puffs=[],ground=new Float32Array(0),cards=[],cardSnow=new Map(),surfs=[],slabs=[],chunks=[],treeS=[],mainR=null,motes=[],wsp=[],webT0=0,glOn=false,glT=0;
   const M={x:-999,y:-999,vx:0,vy:0,down:false,in:false};
-  let men=[],gone=[],hinted=false;   /* snowmen: {x, s: stage 1-4, d: height the newest piece still has to fall, dv: its speed, ty: click y (until the fall starts)} */
+  let men=[],gone=[],hinted=false,plow=null,plowDir=-1,nextPlow=60,pend=null,pop=null,popM=null,popTab="hat";   /* snowmen: {x, s: stage 1-4, d: height the newest piece still has to fall, dv: its speed, ty: click y (until the fall starts)} */
   const blocked=()=>{const o=document.getElementById("over");return !!(o&&o.childElementCount)};
 
   function resize(){const d=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=Math.round(W*d);cv.height=Math.round(H*d);cx.setTransform(d,0,0,d,0,0);
-    const n=Math.ceil(W/COL)+2,g=new Float32Array(n);g.set(ground.subarray(0,Math.min(n,ground.length)));ground=g}
+    const n=Math.ceil(W/COL)+2,g=new Float32Array(n);g.set(ground.subarray(0,Math.min(n,ground.length)));ground=g;placePop()}
   addEventListener("resize",()=>{if(mode)resize()});
   addEventListener("mousemove",e=>{if(M.in){M.vx=e.clientX-M.x;M.vy=e.clientY-M.y}M.x=e.clientX;M.y=e.clientY;M.in=true});
   addEventListener("mousedown",e=>{if(e.button===0)M.down=true});addEventListener("mouseup",()=>{M.down=false});
   /* Christmas: right-click anywhere to drop a snowball (then the next one, ...) onto a snowman: base, middle, head+face, hat+scarf+arms */
   const gy=x=>H-(ground[Math.max(0,Math.min(ground.length-1,Math.round(x/COL)))]||0);
   addEventListener("contextmenu",e=>{
-    if(mode!=="christmas"||blocked()||(e.target.closest&&e.target.closest("input,textarea,select,[contenteditable],.jrow,.inst,.lcard,.scard")))return;
+    if(mode!=="christmas"||!rclick||blocked()||(e.target.closest&&e.target.closest("input,textarea,select,[contenteditable],.jrow,.inst,.lcard,.scard,#snowpop")))return;
     e.preventDefault();const x=e.clientX,y=e.clientY;if(Math.abs(x-(W-95))<70)return;
     const m=men.find(q=>Math.abs(q.x-x)<34);
     if(m){if(m.s<4&&m.d<=0&&m.ty==null){m.s++;m.ty=y}}else{if(men.length>=6)men.shift();men.push({x,s:1,d:0,dv:0,ty:y})}});
@@ -592,7 +604,7 @@ const FX=(()=>{
 
   function christmas(k){
     const want=Math.min(150,Math.round(W/11));while(flakes.length<want)flakes.push(flake(flakes.length<20));
-    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=(M.down?95:58)*radm,ts=H<520?.6:.9,tr=treeSurfs(W-95,H+3,ts);surfs=[...tr,...cards];
+    const act=M.in&&radm>0&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=(M.down?95:58)*radm,ts=H<520?.6:.9,tr=treeSurfs(W-95,H+3,ts);surfs=[...tr,...cards];
     for(const f of flakes){
       f.ph+=.018*k*spd;const py=f.y;f.x+=(Math.sin(f.ph)*.35*Math.min(spd,3)+f.ix)*k;f.y+=(f.vy*spd+f.iy)*k;f.ix*=Math.pow(.93,k);f.iy*=Math.pow(.93,k);
       if(act){const dx=f.x-M.x,dy=f.y-M.y,d2=dx*dx+dy*dy;if(d2<(rad+30)*(rad+30)){const d=Math.sqrt(d2)||1,s=1-Math.min(1,d/(rad+30));f.ix+=(dx/d*s*1.6+M.vx*.05*s)*k;f.iy+=(dy/d*s*1.1+M.vy*.05*s)*k}}
@@ -614,7 +626,9 @@ const FX=(()=>{
       }
       for(let q=slabs.length-1;q>=0;q--){const b=slabs[q];if(Math.hypot(b.lastX-M.x,b.lastY-M.y)<rad){puff(b.lastX,b.lastY,8,M.vx,M.vy);slabs.splice(q,1)}}
     }
-    updateSlabs(k);updateChunks(k);
+    updateSlabs(k);updateChunks(k);updatePlow(k);
+    if(pop&&!men.includes(popM))closePop();
+    if(pop&&frame%8===0)placePop();
     const snowFill="#ffffff",edge=dark?null:"#9fb9d6",fl=dark?"#ffffff":"#9fb9d6";
     tree(W-95,H+3,ts);
     cx.fillStyle=snowFill;
@@ -622,6 +636,7 @@ const FX=(()=>{
     for(const b of slabs){const c=surfOf(b);if(c&&c.tree)drawSlab(b,c,edge)}
     if(men.length)drawMen(k,edge);
     layer(ground.length,i=>i*COL,i=>ground[i],()=>H,edge,4);
+    if(plow)drawPlow();
     cx.save();cx.beginPath();cx.rect(mainR.left,mainR.top,mainR.width,mainR.height);cx.clip();cx.fillStyle=snowFill;
     for(const c of cards)capLayer(c,edge);
     for(const b of slabs){const c=surfOf(b);if(c&&!c.tree)drawSlab(b,c,edge)}
@@ -632,6 +647,69 @@ const FX=(()=>{
     cx.fillStyle=snowFill;for(let i=puffs.length-1;i>=0;i--){const q=puffs[i];q.x+=q.vx*k;q.y+=q.vy*k;q.vy+=.12*k;q.a-=.025*k;if(q.a<=0){puffs.splice(i,1);continue}cx.globalAlpha=q.a;cx.beginPath();cx.arc(q.x,q.y,q.r,0,6.283);cx.fill()}
     cx.globalAlpha=1;
   }
+  /* ---- snowman customizer, snowplow ---- */
+  /* dressing a snowman (m.o = {hat, face, body, clothes} = indexes into POP below); head and body are circles (centre + radius) */
+  const BTN=[["#222","#222","#222"],["#e23b4a","#3b8fe2","#3bb86b"],["#f4c95d","#f4c95d","#f4c95d"],null];
+  function dress(m,sc,hx,hy,hr,bx,by,br){const o=m.o,PI=Math.PI;cx.save();cx.lineCap="round";cx.lineJoin="round";
+    if(o.clothes===4){cx.save();cx.beginPath();cx.arc(bx,by,br,0,6.283);cx.clip();cx.fillStyle="#2f9e5b";cx.fillRect(bx-br,by-br*.3,br*2,br*.62);cx.fillStyle="#f4c95d";cx.fillRect(bx-br,by-br*.02,br*2,br*.1);cx.restore()}
+    const bt=BTN[o.body];if(bt)bt.forEach((c,i)=>{cx.fillStyle=c;cx.beginPath();cx.arc(bx,by-br*.45+i*br*.45,1.7*sc+.3,0,6.283);cx.fill()});
+    if(o.clothes===1||o.clothes===2){cx.fillStyle=o.clothes===1?"#d6313d":"#2f7de1";cx.fillRect(hx-hr*.85,hy+hr*.75,hr*1.7,4*sc+1);cx.fillRect(hx+hr*.25,hy+hr*.75,4*sc+1,12*sc)}
+    if(o.clothes===3){const y=hy+hr*.95;cx.fillStyle="#8a2be2";cx.beginPath();cx.moveTo(hx,y);cx.lineTo(hx-8*sc,y-4.5*sc);cx.lineTo(hx-8*sc,y+4.5*sc);cx.closePath();cx.moveTo(hx,y);cx.lineTo(hx+8*sc,y-4.5*sc);cx.lineTo(hx+8*sc,y+4.5*sc);cx.closePath();cx.fill();cx.beginPath();cx.arc(hx,y,2*sc,0,6.283);cx.fill()}
+    const ex=hx-hr*.4,ex2=hx+hr*.4,ey=hy-hr*.2;cx.fillStyle="#222";cx.strokeStyle="#222";cx.lineWidth=1.2;
+    if(o.face===2){cx.fillRect(hx-hr*.78,ey-hr*.22,hr*.6,hr*.36);cx.fillRect(hx+hr*.18,ey-hr*.22,hr*.6,hr*.36);cx.fillRect(hx-hr*.2,ey-hr*.1,hr*.4,2)}
+    else if(o.face===3){[ex,ex2].forEach(x=>{cx.beginPath();cx.arc(x,ey,hr*.17,0,PI);cx.stroke()})}
+    else{[ex,ex2].forEach(x=>{cx.beginPath();cx.arc(x,ey,1.6*sc+.4,0,6.283);cx.fill()});
+      if(o.face===4){[ex,ex2].forEach(x=>{cx.beginPath();cx.arc(x,ey,hr*.3,0,6.283);cx.stroke()});cx.beginPath();cx.moveTo(ex+hr*.3,ey);cx.lineTo(ex2-hr*.3,ey);cx.stroke()}}
+    if(o.face===1){cx.beginPath();cx.arc(hx,hy+hr*.1,hr*.5,.2*PI,.8*PI);cx.stroke()}
+    cx.fillStyle="#ff8a1f";cx.beginPath();cx.moveTo(hx,hy+hr*.05);cx.lineTo(hx+hr*1.1,hy+hr*.22);cx.lineTo(hx,hy+hr*.4);cx.closePath();cx.fill();   /* carrot nose */
+    const ht=o.hat;
+    if(ht===1){cx.fillStyle="#d6313d";cx.beginPath();cx.moveTo(hx-hr*.95,hy-hr*.5);cx.quadraticCurveTo(hx-hr*.6,hy-hr*2,hx+hr*1.05,hy-hr*1.3);cx.lineTo(hx+hr*.95,hy-hr*.5);cx.closePath();cx.fill();cx.fillStyle="#fff";cx.fillRect(hx-hr*1.02,hy-hr*.66,hr*2.04,hr*.3);cx.beginPath();cx.arc(hx+hr*1.05,hy-hr*1.3,hr*.26,0,6.283);cx.fill()}
+    else if(ht===2){cx.fillStyle="#222";cx.fillRect(hx-hr*1.05,hy-hr*.85,hr*2.1,3*sc+.5);cx.fillRect(hx-hr*.65,hy-hr*.85-14*sc,hr*1.3,14*sc);cx.fillStyle="#d6313d";cx.fillRect(hx-hr*.65,hy-hr*.85-4*sc,hr*1.3,3*sc)}
+    else if(ht===3){cx.strokeStyle="#8a8f98";cx.lineWidth=2.4;cx.beginPath();cx.arc(hx,hy,hr*1.02,PI*1.05,PI*1.95);cx.stroke();cx.fillStyle="#d6313d";[-1,1].forEach(d=>{cx.beginPath();cx.arc(hx+d*hr,hy-hr*.05,hr*.34,0,6.283);cx.fill()})}
+    else if(ht===4){cx.fillStyle="#f4c95d";cx.beginPath();cx.moveTo(hx-hr*.7,hy-hr*.8);cx.lineTo(hx-hr*.7,hy-hr*1.5);cx.lineTo(hx-hr*.35,hy-hr*1.15);cx.lineTo(hx,hy-hr*1.6);cx.lineTo(hx+hr*.35,hy-hr*1.15);cx.lineTo(hx+hr*.7,hy-hr*1.5);cx.lineTo(hx+hr*.7,hy-hr*.8);cx.closePath();cx.fill();cx.fillStyle="#d6313d";cx.beginPath();cx.arc(hx,hy-hr*.98,hr*.1,0,6.283);cx.fill()}
+    else if(ht===5){cx.fillStyle="#2f7de1";cx.beginPath();cx.arc(hx,hy-hr*.5,hr*.95,PI,0);cx.closePath();cx.fill();cx.fillStyle="#fff";cx.fillRect(hx-hr*.97,hy-hr*.62,hr*1.94,hr*.24);cx.beginPath();cx.arc(hx,hy-hr*1.5,hr*.22,0,6.283);cx.fill()}
+    cx.restore()}
+  const POP={hat:["None","Santa hat","Top hat","Earmuffs","Crown","Beanie"],face:["Coal","Happy","Sunglasses","Sleepy","Glasses"],body:["Coal buttons","Candy buttons","Gold buttons","No buttons"],clothes:["None","Red scarf","Blue scarf","Bow tie","Sweater"]};
+  const POPL={hat:"Hat",face:"Face",body:"Buttons",clothes:"Outfit"},POPI={hat:"\u{1F3A9}",face:"\u{1F642}",body:"\u{1F518}",clothes:"\u{1F9E3}"};
+  const POPC={hat:[null,"#d6313d","#222","#8a8f98","#f4c95d","#2f7de1"],face:["#222","#f4c95d","#222","#222","#222"],body:["#222","#e23b4a","#f4c95d",null],clothes:[null,"#d6313d","#2f7de1","#8a2be2","#2f9e5b"]};
+  function closePop(){if(pop){pop.remove();pop=null;popM=null}}
+  /* put the menu beside the snowman, always fully inside the window (it scrolls itself if the window is tiny) */
+  function placePop(){if(!pop||!popM||!popM.hb)return;const hb=popM.hb,w=pop.offsetWidth,h=pop.offsetHeight,g=8;
+    let x=hb.x+hb.w+12;if(x+w>W-g)x=hb.x-w-12;x=Math.max(g,Math.min(W-w-g,x));
+    const y=Math.max(g,Math.min(H-h-g,hb.y+hb.h/2-h/2));pop.style.left=x+"px";pop.style.top=y+"px"}
+  function drawPop(){if(!pop)return;const o=popM.o;
+    pop.innerHTML='<div class="sph"><span>Dress up your snowman</span><button class="spx" data-x aria-label="Close">\u00d7</button></div><div class="spt">'+Object.keys(POP).map(k=>'<button data-t="'+k+'" class="'+(k===popTab?'on':'')+'"><b>'+POPI[k]+'</b>'+POPL[k]+'</button>').join("")+'</div><div class="spo">'+POP[popTab].map((n,i)=>{const c=POPC[popTab][i];return '<button data-i="'+i+'" class="'+(o[popTab]===i?'on':'')+'"><i style="'+(c?'background:'+c:'background:transparent;border-style:dashed')+'"></i><span>'+n+'</span></button>'}).join("")+'</div>';
+    pop.querySelector("[data-x]").onclick=closePop;
+    pop.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{popTab=b.dataset.t;drawPop()});
+    pop.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>{o[popTab]=+b.dataset.i;drawPop()});placePop()}
+  function openPop(m){closePop();popM=m;if(!m.o)m.o={hat:m.s>=4?2:0,face:0,body:0,clothes:m.s>=4?1:0};
+    pop=document.createElement("div");pop.id="snowpop";document.body.appendChild(pop);drawPop()}
+  /* mouse: grab a snowball / click a snowman. Capture phase, so the page under the canvas doesn't also get the click. */
+  let eat=false;
+  addEventListener("mousedown",e=>{eat=false;if(e.button!==0||mode!=="christmas"||(pop&&pop.contains(e.target)))return;
+    const x=e.clientX,y=e.clientY,m=men.find(q=>q.hb&&q.s>=3&&q.d<=0&&x>=q.hb.x&&x<=q.hb.x+q.hb.w&&y>=q.hb.y&&y<=q.hb.y+q.hb.h);
+    if(m){eat=true;pend={m,x,y};e.preventDefault();e.stopPropagation();return}
+    closePop()},true);
+  addEventListener("mouseup",e=>{if(pend){const p=pend;pend=null;if(Math.hypot(e.clientX-p.x,e.clientY-p.y)<6&&men.includes(p.m))openPop(p.m)}},true);
+  addEventListener("click",e=>{if(eat){eat=false;e.stopPropagation();e.preventDefault()}},true);
+  addEventListener("keydown",e=>{if(e.key==="Escape")closePop()});
+
+  /* snowplow: every minute or so a small yellow plow drives along the bottom edge (alternating directions) and scrapes the floor snow away */
+  function schedPlow(){nextPlow=t+Math.max(plowEvery,5)*rnd(.75,1.25)}
+  function updatePlow(k){
+    if(!plow){if(!plowEvery||t<nextPlow)return;if(ground.reduce((a,v)=>a+v,0)<25){nextPlow=t+10;return}
+      plowDir=-plowDir;plow={x:plowDir>0?-80:W+80,d:plowDir};schedPlow();return}
+    plow.x+=plow.d*2.6*k;const bx=plow.x+plow.d*38,i0=Math.max(0,((bx-18)/COL)|0),i1=Math.min(ground.length-1,((bx+18)/COL)|0);
+    for(let i=i0;i<=i1;i++){const h=ground[i];if(h>.5){if(Math.random()<.4)puff(i*COL,H-h,1,plow.d*4,-2);ground[i]=0}}
+    if(plow.d>0?plow.x>W+100:plow.x<-100)plow=null}
+  function drawPlow(){const p=plow,s=H<520?.8:1,bob=Math.sin(t*20)*.7;cx.save();cx.translate(p.x,H);cx.scale(p.d*s,s);cx.lineWidth=1;cx.strokeStyle="#7a5c00";
+    cx.fillStyle="#f4c20d";cx.fillRect(-28,-24+bob,42,13);cx.strokeRect(-28,-24+bob,42,13);cx.fillRect(-6,-37+bob,20,13);cx.strokeRect(-6,-37+bob,20,13);
+    cx.fillStyle="#bfe3ff";cx.fillRect(0,-35+bob,11,8);
+    cx.fillStyle="#9aa3ad";cx.strokeStyle="#4b525a";cx.beginPath();cx.moveTo(18,-5);cx.lineTo(36,-27);cx.lineTo(41,-27);cx.lineTo(41,-1);cx.lineTo(22,-1);cx.closePath();cx.fill();cx.stroke();
+    cx.lineWidth=2;cx.beginPath();cx.moveTo(14,-16+bob);cx.lineTo(24,-14);cx.stroke();
+    [-16,6].forEach(x=>{cx.fillStyle="#222";cx.beginPath();cx.arc(x,-6,6,0,6.283);cx.fill();cx.fillStyle="#9aa3ad";cx.beginPath();cx.arc(x,-6,2.2,0,6.283);cx.fill()});
+    cx.fillStyle=Math.sin(t*12)>0?"#ff7a18":"#ff2d2d";cx.beginPath();cx.arc(4,-40+bob,3,0,6.283);cx.fill();cx.restore()}
+
   function drawMen(k,edge){
     const sc=H<520?.7:1,ln=edge||"rgba(150,175,205,.55)";
     cx.save();   /* the colours used here must not leak into the snow layers drawn after us */
@@ -648,13 +726,15 @@ const FX=(()=>{
       for(let i=0;i<Math.min(3,m.s);i++){
         const off=i===m.s-1&&m.s<=3?m.d:0;
         cx.fillStyle="#fff";cx.beginPath();cx.arc(m.x,cy[i]-off,r[i],0,6.283);cx.fill();cx.stroke()}
-      if(m.s>=3&&(m.s>3||land)){
+      if(!m.o&&m.s>=3&&(m.s>3||land)){
         cx.fillStyle="#222";[-1,1].forEach(d=>{cx.beginPath();cx.arc(m.x+d*r[2]*.4,c3-r[2]*.2,1.6*sc+.4,0,6.283);cx.fill()});
         [0,1,2].forEach(i=>{cx.beginPath();cx.arc(m.x,c2-r[1]*.45+i*r[1]*.45,1.7*sc+.3,0,6.283);cx.fill()});
         cx.fillStyle="#ff8a1f";cx.beginPath();cx.moveTo(m.x,c3+r[2]*.05);cx.lineTo(m.x+r[2]*1.1,c3+r[2]*.22);cx.lineTo(m.x,c3+r[2]*.4);cx.closePath();cx.fill()}
-      if(m.s>=4){
+      if(!m.o&&m.s>=4){
         if(land){cx.fillStyle="#d6313d";cx.fillRect(m.x-r[2]*.85,c3+r[2]*.75,r[2]*1.7,4*sc+1);cx.fillRect(m.x+r[2]*.25,c3+r[2]*.75,4*sc+1,12*sc)}
         const hy=c3-m.d;cx.fillStyle="#222";cx.fillRect(m.x-r[2]*1.05,hy-r[2]*.85,r[2]*2.1,3*sc+.5);cx.fillRect(m.x-r[2]*.65,hy-r[2]*.85-14*sc,r[2]*1.3,14*sc)}
+      if(m.o&&m.s>=3&&land)dress(m,sc,m.x,c3,r[2],m.x,c2,r[1]);   /* customised: the popover choices replace the default face, hat and scarf */
+      m.hb={x:m.x-r[0],y:m.s>=3?c3-r[2]*2.2:m.s>=2?c2-r[1]:c1-r[0],w:r[0]*2,h:0};m.hb.h=by-m.hb.y;
     }
     cx.restore();
   }
@@ -708,7 +788,7 @@ const FX=(()=>{
     const maxR=Math.min(WRG,Math.floor(rg));if(maxR<3)return;
     if(!wsp.some(s=>s.w===w&&!s.small))wsp.push(newSp(w,false));
     if(rg>=6&&!wsp.some(s=>s.w===w&&s.small))wsp.push(newSp(w,true));
-    const unit=Rd/WRG,al=Math.min(1,(rg-3)*3),act=M.in&&!blocked();
+    const unit=Rd/WRG,al=Math.min(1,(rg-3)*3),act=M.in&&radm>0&&!blocked();
     for(const s of wsp){if(s.w!==w)continue;
       const rr=s.rad*unit*(1-s.sag),lx=Math.cos(s.ang)*rr,ly=Math.sin(s.ang)*rr;
       const dx=ox+(flip?-lx:lx)-M.x,dy=mainR.top+ly-M.y,scare=act&&dx*dx+dy*dy<70*70;   // the mouse close by makes them scurry
@@ -740,7 +820,7 @@ const FX=(()=>{
     if(g>.5)spider(mainR.right-14-Rd*.42,24+34*(.5+.5*Math.sin(t*.5)),Math.min(1,(g-.5)*2));
     [[.05,32],[.17,24],[.33,38],[.5,27],[.66,35],[.8,25],[.93,30]].forEach(([fx,r],i)=>{if(fx*W>56)pumpkin(fx*W,H-1,r,i)});
     const want=Math.min(90,Math.round(W/16));while(motes.length<want)motes.push(mote(true));
-    const act=M.in&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=(M.down?130:85)*radm;cx.fillStyle=dark?"#e6dff5":"#6a4a8a";
+    const act=M.in&&radm>0&&!blocked(),sp=Math.hypot(M.vx,M.vy),rad=(M.down?130:85)*radm;cx.fillStyle=dark?"#e6dff5":"#6a4a8a";
     for(let i=0;i<motes.length;i++){const p=motes[i];p.ph+=.012*k;
       p.vx+=(Math.sin(p.ph*1.3+p.s)*.012-p.vx*.02)*k;p.vy+=(p.base+Math.cos(p.ph)*.03-p.vy)*.03*k;
       if(act){const dx=p.x-M.x,dy=p.y-M.y,d2=dx*dx+dy*dy;if(d2<rad*rad){const d=Math.sqrt(d2)||1,s=1-d/rad;p.vx+=(dx/d*s*.9+M.vx*.07*s)*k;p.vy+=(dy/d*s*.7+M.vy*.07*s)*k;if((sp>8||M.down)&&s>.15)p.st=2}}
@@ -753,26 +833,30 @@ const FX=(()=>{
     cx.globalAlpha=1;
   }
 
+  /* menus / dropdowns / panels that sit above the page must never have snow drawn over them: punch their area out of the canvas */
+  const MENUQ=".dd-list,.pop,.psub,.tpan,.toast,[role=menu],[role=listbox]";
+  function cutMenus(){document.querySelectorAll(MENUQ).forEach(el=>{const b=el.getBoundingClientRect();if(b.width<2||b.height<2)return;const cs=getComputedStyle(el);if(cs.visibility==="hidden"||cs.display==="none"||+cs.opacity<.05)return;cx.clearRect(b.left-1,b.top-1,b.width+2,b.height+2)})}
   function loop(ts){raf=requestAnimationFrame(loop);const dt=Math.min(.05,(ts-last)/1000||.016),k=dt*60;last=ts;t+=dt;frame++;
     M.vx*=Math.pow(.8,k);M.vy*=Math.pow(.8,k);if(!mode)return;if(frame%2===0||!mainR)refreshCards();if(!mainR)return;
-    cx.clearRect(0,0,W,H);mode==="christmas"?christmas(k):halloween(k)}
-  const stop=()=>{if(raf)cancelAnimationFrame(raf);raf=0;cx.clearRect(0,0,W,H);cv.style.display="none"};
+    cx.clearRect(0,0,W,H);mode==="christmas"?christmas(k):halloween(k);cutMenus()}
+  const stop=()=>{if(raf)cancelAnimationFrame(raf);raf=0;cx.clearRect(0,0,W,H);cv.style.display="none";closePop()};
 
   /* Glitch: now and then the whole page tears for a moment (see html.glx in the CSS) */
   function glitch(on){if(on===glOn)return;glOn=on;clearTimeout(glT);R.classList.remove("glx");if(!on)return;
     const go=()=>{glT=setTimeout(()=>{R.classList.add("glx");glT=setTimeout(()=>{R.classList.remove("glx");go()},120+Math.random()*160)},2200+Math.random()*4800)};go()}
 
   /* Settings > Appearance > Christmas snow: max pile height (px) and fall speed (%). Boxes hold 24% of the floor height, the tree 80% of that. */
-  function cfg(){const st=S.settings||{};radm=Math.max(.2,Math.min(2,(+st.mouse_radius||50)/50));gmax=Math.max(4,Math.min(100,+st.snow_height||34));cmax=Math.max(2.5,gmax*.24);tmax=cmax*.8;const sf=st.snow_fall!=null?+st.snow_fall:Math.round((+st.snow_speed||100)/10);spd=Math.max(.1,Math.min(10,(Math.max(1,Math.min(100,sf||10)))/10))}
+  function cfg(){const st=S.settings||{};radm=Math.max(0,Math.min(2,(st.mouse_radius!=null&&!isNaN(+st.mouse_radius)?+st.mouse_radius:50)/50));gmax=Math.max(4,Math.min(100,+st.snow_height||34));cmax=Math.max(2.5,gmax*.24);tmax=cmax*.8;const sf=st.snow_fall!=null?+st.snow_fall:Math.round((+st.snow_speed||100)/10);spd=Math.max(.1,Math.min(10,(Math.max(1,Math.min(100,sf||10)))/10));
+    rclick=st.snow_rclick!==false;const pe=st.plow_every!=null&&!isNaN(+st.plow_every)?Math.max(0,+st.plow_every):60;if(pe!==plowEvery){plowEvery=pe;if(pe)schedPlow()}}
 
   /* called when the theme, the animation switch or the page changes */
   function sync(){cfg();
     const th=R.dataset.theme||"",page=typeof S==="object"?S.page:"",animOn=(S.settings&&S.settings.animations)!==false&&!document.hidden&&document.hasFocus()&&innerWidth>0&&innerHeight>0,
       f=/^christmas/.test(th)?"christmas":/^halloween/.test(th)?"halloween":null,want=animOn&&f&&(page==="home"||page==="lib"||page==="servers")?f:null;
     dark=/dark$/.test(th)||!/light$/.test(th);
-    if(f!==fam){fam=f;flakes=[];puffs=[];motes=[];wsp=[];men=[];ground=new Float32Array(0);cardSnow=new Map();slabs=[];chunks=[];treeS=[];webT0=performance.now()}
+    if(f!==fam){fam=f;flakes=[];puffs=[];motes=[];wsp=[];men=[];ground=new Float32Array(0);cardSnow=new Map();slabs=[];chunks=[];treeS=[];plow=null;closePop();schedPlow();webT0=performance.now()}
     mode=want;R.dataset.fx=want?"on":"off";
-    if(want==="christmas"&&!hinted){hinted=true;try{if(!localStorage.getItem("orbit_snowman")){localStorage.setItem("orbit_snowman","1");setTimeout(()=>toast("Right-click to drop snowballs and build a snowman. Drag through one to knock it down.",7000),1500)}}catch(e){}}
+    if(want==="christmas"&&rclick&&!hinted){hinted=true;try{if(!localStorage.getItem("orbit_snowman")){localStorage.setItem("orbit_snowman","1");setTimeout(()=>toast("Right-click to build a snowman, then click it to dress it up. Drag through it to knock it down.",7000),1500)}}catch(e){}}
 glitch(animOn&&th==="glitch");
     if(!mode){stop();return}
     cv.style.display="block";resize();if(!raf){last=performance.now();raf=requestAnimationFrame(loop)}}
@@ -2336,18 +2420,18 @@ function drawFilters(){
 
 /* ---------- settings (modal, like the Modrinth app) ---------- */
 function settingsModal(sec="appearance"){
-  const nav=[["DISPLAY",[["appearance","Appearance","brush"]]],["INSTANCES",[["storage","Storage","folder"],["launch","Launch","play"],["playtime","Playtime","clock"]]],["INSTANCE DEFAULTS",[["java","Java &amp; memory","cpu"],["window","Window","monitor"],["hooks","Launch hooks","terminal"],["syncing","Syncing","refresh"]]],["INTEGRATIONS",[["accounts","Microsoft account","key"],["curseforge","CurseForge key","key"]]],["ABOUT",[["about","About Orbit","info"]]]];
+  const nav=[["DISPLAY",[["appearance","Appearance","brush"]]],["INSTANCES",[["storage","Storage","folder"],["launch","Launch","play"],["playtime","Playtime","clock"]]],["INSTANCE DEFAULTS",[["java","Java &amp; memory","cpu"],["window","Window","monitor"],["hooks","Launch hooks","terminal"],["syncing","Syncing","refresh"]]],["INTEGRATIONS",[["accounts","Microsoft account","key"],["curseforge","CurseForge key","key"],["discord","Discord","play"]]],["ABOUT",[["about","About Orbit","info"]]]];
   openOver(`<div class="modal-bg"><div class="smodal" role="dialog" aria-label="Settings"><div class="shead"><h2>Settings</h2><button class="xb" id="sx" aria-label="Close">${ic("x")}</button></div>
   <div class="sbody"><div class="snav">${nav.map(([h,items])=>`<h4>${h}</h4>`+items.map(([k,t,i])=>`<button data-sec="${k}" class="${k===sec?"on":""}">${ic(i,"sm")}${t}</button>`).join("")).join("")}</div><div class="spane" id="sp"></div></div></div></div>`);
   $("#sx").onclick=closeOver;
   ov().querySelectorAll("[data-sec]").forEach(b=>b.onclick=()=>settingsModal(b.dataset.sec));
-  api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,java:pJava,window:pWindow,hooks:pHooks,syncing:pSyncing,playtime:pPlaytime,accounts:pAccounts,curseforge:pCF,about:pAbout})[sec]($("#sp"))});
+  api("/settings").then(s=>{S.settings=s;({appearance:pAppearance,storage:pStorage,launch:pLaunch,java:pJava,window:pWindow,hooks:pHooks,syncing:pSyncing,playtime:pPlaytime,accounts:pAccounts,curseforge:pCF,discord:pDiscord,about:pAbout})[sec]($("#sp"))});
 }
 const AC=[["Theme default",""],["Orbit green","#1bd96a"],["Blue","#4c8dff"],["Purple","#a56bff"],["Pink","#ff5fa2"],["Orange","#ff9a3c"],["Red","#ff496e"],["Teal","#2ad4c9"]];
 const THEME_ACC={blackout:"#000","christmas-light":"#c8222d","christmas-dark":"#d6313d","halloween-light":"#e8650a","halloween-dark":"#ff7a18",glitch:"#00e5ff",synthwave:"#ff2fb8",aurora:"#2fe0a8"};
-const SNL={snow_height:[4,10,20,34,50,70,100],snow_fall:[1,2,5,10,15,25,40,60,80,100],mouse_radius:[10,20,30,40,50,60,70,80,90,100]},SNU={snow_height:" px",snow_fall:"%",mouse_radius:"%"},SND={snow_height:34,snow_fall:10,mouse_radius:50};
+const SNL={snow_height:[4,10,20,34,50,70,100],snow_fall:[1,2,5,10,15,25,40,60,80,100],mouse_radius:[0,10,20,30,40,50,60,70,80,90,100],plow_every:[0,15,30,60,120,300]},SNU={snow_height:v=>v+" px",snow_fall:v=>v+"%",mouse_radius:v=>v?v+"%":"Off",plow_every:v=>v?(v<60?v+" sec":(v/60)+" min"):"Off"},SND={snow_height:34,snow_fall:10,mouse_radius:50,plow_every:60};
 function pAppearance(p){
-  const cur=S.settings.theme||"oled",animOn=S.settings.animations!==false,snH=Math.max(4,Math.min(100,+S.settings.snow_height||34)),snS=Math.max(1,Math.min(100,S.settings.snow_fall!=null?+S.settings.snow_fall:Math.round((+S.settings.snow_speed||100)/10))),xmas=/^christmas/.test(cur),hallo=/^halloween/.test(cur),snR=Math.max(10,Math.min(100,+S.settings.mouse_radius||50)),batOn=UF().batsave!==false;
+  const cur=S.settings.theme||"oled",animOn=S.settings.animations!==false,snH=Math.max(4,Math.min(100,+S.settings.snow_height||34)),snS=Math.max(1,Math.min(100,S.settings.snow_fall!=null?+S.settings.snow_fall:Math.round((+S.settings.snow_speed||100)/10))),xmas=/^christmas/.test(cur),hallo=/^halloween/.test(cur),snR=Math.max(0,Math.min(100,S.settings.mouse_radius!=null&&!isNaN(+S.settings.mouse_radius)?+S.settings.mouse_radius:50)),plE=S.settings.plow_every!=null?+S.settings.plow_every:60,rcOn=S.settings.snow_rclick!==false,batOn=UF().batsave!==false;
   /* snow settings are steppers (- value +) that walk through a ladder of sensible values */
   const stp=(key,lab,val)=>`<div class="field" style="margin-top:${key==="snow_height"?0:16}px"><label class="l">${lab}</label><div class="ramf stp"><button class="btn sm" data-sn="${key}" data-d="-1" aria-label="Decrease ${lab.toLowerCase()}">−</button><span class="rl" id="${key}_l" aria-live="polite">${val}</span><button class="btn sm" data-sn="${key}" data-d="1" aria-label="Increase ${lab.toLowerCase()}">+</button></div></div>`;
   /* single themes: [key,label,bg,card,line]; dual themes: one slot, left half = Light, right half = Dark */
@@ -2365,11 +2449,14 @@ function pAppearance(p){
   <div class="tgl" id="an" role="switch" tabindex="0" aria-checked="${animOn}">Theme animations: ${animOn?"On":"Off"}<span class="sw ${animOn?"on":""}"></span></div>
   <div class="tgl" id="bs" role="switch" tabindex="0" aria-checked="${batOn}">Pause animations on low battery<span class="sw ${batOn?"on":""}"></span></div>
   <div class="note" style="margin-top:7px">Saves power: effects stop while your laptop is unplugged at 50% or less.</div>
-  ${xmas||hallo?`<h3 style="margin-top:25px">Mouse radius</h3><div class="d">How far around your mouse snow is cleared (Christmas) or dust is pushed away (Halloween). Dragging uses a larger radius. 10% to 100%; 50% is the default.</div>
-  ${stp("mouse_radius","Radius",snR+"%")}`:""}
+  ${xmas||hallo?`<h3 style="margin-top:25px">Mouse radius</h3><div class="d">How far around your mouse snow is cleared (Christmas) or dust is pushed away (Halloween). Dragging uses a larger radius. 10% to 100%; 50% is the default. Choose Off to stop the mouse touching the snow or dust at all.</div>
+  ${stp("mouse_radius","Radius",SNU.mouse_radius(snR))}`:""}
   ${xmas?`<h3 style="margin-top:25px">Christmas snow</h3><div class="d">How deep the snow can pile up and how fast it falls (1% to 100%; 10% is the default). Cards and the tree hold less than the floor, and snow that gets too deep slides off by itself.</div>
   ${stp("snow_height","Maximum snow height",snH+" px")}${stp("snow_fall","Snowfall speed",snS+"%")}
-  <div class="gap"><button class="btn sm" id="snr">Reset snow</button></div>`:""}
+  <div class="gap"><button class="btn sm" id="snr">Reset snow</button></div>
+  <h3 style="margin-top:25px">Bulldozer &amp; snowmen</h3><div class="d">How often the little bulldozer drives past and clears the floor (Off, or every 15 seconds up to every 5 minutes; 1 min is the default), and whether right-click builds snowmen.</div>
+  ${stp("plow_every","Bulldozer visits",plE?"every "+SNU.plow_every(plE):"Off")}
+  <div class="tgl" id="rcs" role="switch" tabindex="0" aria-checked="${rcOn}" style="margin-top:12px">Right-click builds a snowman<span class="sw ${rcOn?"on":""}"></span></div>`:""}
   <h3 style="margin-top:25px">High contrast</h3><div class="d">Stronger text and borders and a clear focus outline, for easier reading.</div>
   <div class="tgl" id="hc" role="switch" tabindex="0" aria-checked="${S.settings.high_contrast!==false}">High contrast mode<span class="sw ${S.settings.high_contrast!==false?"on":""}"></span></div>
   <h3 style="margin-top:25px">Accent color</h3><div class="d">Used for buttons, highlights and links. "Theme default" keeps each theme's own colour. Text colors are adjusted to stay readable.</div>
@@ -2381,14 +2468,15 @@ function pAppearance(p){
   $("#an").onclick=anT;$("#an").onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();anT()}};
   if(xmas||hallo){
     const snS0=()=>S.settings.snow_fall!=null?+S.settings.snow_fall:Math.round((+S.settings.snow_speed||100)/10);
-    const snCur=key=>key==="snow_fall"?snS0():(+S.settings[key]||SND[key]);
+    const snCur=key=>key==="snow_fall"?snS0():(S.settings[key]!=null&&!isNaN(+S.settings[key])?+S.settings[key]:SND[key]);
     const snUI=()=>{for(const key in SNL){if(!$("#"+key+"_l"))continue;const L=SNL[key],c=Math.max(L[0],Math.min(L[L.length-1],snCur(key)));
-      $("#"+key+"_l").textContent=c+SNU[key];
+      $("#"+key+"_l").textContent=(key==="plow_every"&&c?"every ":"")+SNU[key](c);
       p.querySelector(`[data-sn="${key}"][data-d="-1"]`).disabled=c<=L[0];p.querySelector(`[data-sn="${key}"][data-d="1"]`).disabled=c>=L[L.length-1]}};
     const snStep=async(key,d)=>{const L=SNL[key],c=snCur(key),v=d>0?L.find(x=>x>c):[...L].reverse().find(x=>x<c);if(v==null)return;
       S.settings[key]=v;FX.cfg();snUI();
       try{S.settings=await api("/settings","POST",{[key]:v})}catch(e){toast(e.message,4000)}FX.cfg();snUI()};
     p.querySelectorAll("[data-sn]").forEach(b=>b.onclick=()=>snStep(b.dataset.sn,+b.dataset.d));snUI();
+    [["rcs","snow_rclick"]].forEach(([id,key])=>{const el=$("#"+id);if(!el)return;const tg=async()=>{const v=S.settings[key]===false;S.settings[key]=v;FX.cfg();try{S.settings=await api("/settings","POST",{[key]:v})}catch(e){toast(e.message,4000)}FX.cfg();pAppearance(p)};el.onclick=tg;el.onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();tg()}}});
     if($("#snr"))$("#snr").onclick=async()=>{try{S.settings=await api("/settings","POST",{snow_height:34,snow_fall:10})}catch(e){toast(e.message,4000)}FX.cfg();pAppearance(p)};
   }
   const bsT=async()=>{await ufSet({batsave:!batOn});pAppearance(p)};
@@ -2518,6 +2606,13 @@ function pSyncing(p){
   ${R.map(([it,k,t,n])=>`<div class="srow"><div class="grow"><b>${t}</b><div class="meta">${n}</div></div><button class="ib" data-ed="${it}" aria-label="Edit the shared ${t.toLowerCase()}" title="Open the shared copy">${ic("edit")}</button><span class="sw ${s[k]?"on":""}" role="switch" tabindex="0" data-sk="${k}" aria-checked="${!!s[k]}" aria-label="Sync ${t.toLowerCase()}"></span></div>`).join("")}`;
   p.querySelectorAll("[data-sk]").forEach(b=>{const go=async()=>{if(await savePref({[b.dataset.sk]:!S.settings[b.dataset.sk]},()=>{}))pSyncing(p)};b.onclick=go;b.onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();go()}}});
   p.querySelectorAll("[data-ed]").forEach(b=>b.onclick=async()=>{try{await api("/sync/open","POST",{item:b.dataset.ed})}catch(e){toast(e.message,5000)}});
+}
+function pDiscord(p){
+  const s=S.settings,R=[["discord_presence","Show what I'm playing on Discord","Your Discord status shows \"Playing <instance>\" with a timer while a game runs, or \"Hosting <server>\" while a server runs. Needs the Discord app open on this computer."],["discord_hide_names","Hide instance and server names","Show only \"Playing Minecraft\" and \"Hosting a Minecraft server\", so private names stay private."]];
+  p.innerHTML=`<h3>Discord</h3><div class="d">Rich Presence, like the Modrinth app. Off by default. It only talks to the Discord app on this computer.</div>
+  <div class="note" style="margin:10px 0"><b>Status:</b> ${esc(s.discord_status||"Starting...")}</div>${s.discord_ready?"":'<div class="note" style="margin:10px 0">No Discord application ID is set in this build, so nothing will show yet. Create one at discord.com/developers, put its ID in <code>APP_ID</code> in <code>src/discord.rs</code> (or set <code>ORBIT_DISCORD_APP_ID</code>), and upload an art asset named <code>orbit</code>.</div>'}
+  ${R.map(([k,t,n])=>`<div class="srow"><div class="grow"><b>${t}</b><div class="meta">${n}</div></div><span class="sw ${s[k]?"on":""}" role="switch" tabindex="0" data-dk="${k}" aria-checked="${!!s[k]}" aria-label="${t}"></span></div>`).join("")}`;
+  p.querySelectorAll("[data-dk]").forEach(b=>{const go=async()=>{if(await savePref({[b.dataset.dk]:!S.settings[b.dataset.dk]},()=>{}))pDiscord(p)};b.onclick=go;b.onkeydown=e=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();go()}}});
 }
 function pCF(p){
   const h=S.settings.has_cf_key;

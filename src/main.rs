@@ -7,6 +7,7 @@ mod api;
 mod auth;
 mod deps;
 mod diagnose;
+mod discord;
 mod dialogs;
 mod gamedata;
 mod icons;
@@ -215,6 +216,7 @@ fn run() -> Result<(), String> {
         .map_err(|e| format!("Orbit couldn't open its local port ({e}). A firewall or security program may be blocking it."))?;
     let port = server.server_addr().to_ip().map(|a| a.port()).unwrap_or(0);
     servers::start_scheduler();
+    discord::start();
     let t = token.clone();
     std::thread::spawn(move || {
         for req in server.incoming_requests() {

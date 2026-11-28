@@ -164,7 +164,9 @@ fn settings(r: &Req) -> Res {
         if let Some(a) = b["animations"].as_bool() { st.insert("animations".into(), json!(a)); } // theme animations on/off
         if let Some(n) = b["snow_height"].as_i64() { st.insert("snow_height".into(), json!(n.clamp(4, 100))); } // Christmas: max snow pile height (px)
         if let Some(o) = b["ui_flags"].as_object().filter(|o| serde_json::to_string(o).map(|t| t.len() <= 20000).unwrap_or(false)) { st.insert("ui_flags".into(), serde_json::Value::Object(o.clone())); } // small UI flags (tour seen, pinned instances, ...)
-        if let Some(n) = b["mouse_radius"].as_i64() { st.insert("mouse_radius".into(), json!(n.clamp(10, 100))); } // Christmas/Halloween: mouse radius (%)
+        if let Some(n) = b["mouse_radius"].as_i64() { st.insert("mouse_radius".into(), json!(n.clamp(0, 100))); } // Christmas/Halloween: mouse radius (%), 0 = off
+        if let Some(n) = b["plow_every"].as_i64() { st.insert("plow_every".into(), json!(n.clamp(0, 600))); } // Christmas: seconds between bulldozer visits, 0 = never
+        if let Some(v) = b["snow_rclick"].as_bool() { st.insert("snow_rclick".into(), json!(v)); } // Christmas: right-click builds a snowman
         if let Some(n) = b["snow_fall"].as_i64() { st.insert("snow_fall".into(), json!(n.clamp(1, 100))); } // Christmas: snowfall amount (1 to 100, 10 = default)
         if let Some(n) = b["snow_speed"].as_i64() { st.insert("snow_speed".into(), json!(n.clamp(10, 1000))); } // Christmas: snowfall speed (%)
         // minutes east of UTC, reported by the window; the daily server restart uses it to read the local clock
@@ -230,6 +232,9 @@ fn settings(r: &Req) -> Res {
             if let Some(on) = b[k].as_bool() { st.insert(k.into(), json!(on)); }
         }
         if let Some(a) = b["auto_deps"].as_bool() { st.insert("auto_deps".into(), json!(a)); }
+        for k in ["discord_presence", "discord_hide_names"] {
+            if let Some(on) = b[k].as_bool() { st.insert(k.into(), json!(on)); }
+        }
         if let Some(a) = b["jvm_args"].as_str() { st.insert("jvm_args".into(), json!(a.trim().chars().take(500).collect::<String>())); }
         dir_setting(&mut st, b, "tlauncher_dir", "TLauncher")?;
         dir_setting(&mut st, b, "modrinth_dir", "Modrinth App")?;
@@ -263,13 +268,14 @@ fn settings(r: &Req) -> Res {
         "hook_pre": g("hook_pre"), "hook_wrapper": g("hook_wrapper"), "hook_post": g("hook_post"),
         "sync_options": on("sync_options"), "sync_servers": on("sync_servers"), "sync_packs": on("sync_packs"),
         "auto_deps": servers::auto_deps(),
+        "discord_presence": on("discord_presence"), "discord_hide_names": on("discord_hide_names"), "discord_ready": crate::discord::configured(), "discord_status": crate::discord::status(),
         "tl_dir": store::tl_root().to_string_lossy(), "tl_default": store::default_mc_dir().to_string_lossy(),
         "tl_is_default": g("tlauncher_dir").is_empty(), "is_default": g("instances_dir").is_empty(),
         "theme": st.get("theme").cloned().unwrap_or(json!("oled")), "moved": moved,
         "accent": g("accent"), "high_contrast": st.get("high_contrast").and_then(|v| v.as_bool()).unwrap_or(true),
         "close_warning": store::close_warning(), "close_timer": store::close_timer(),
         "animations": st.get("animations").and_then(|v| v.as_bool()).unwrap_or(true),
-        "snow_height": store::snow_height(), "snow_speed": store::snow_speed(), "snow_fall": store::snow_fall(), "mouse_radius": store::mouse_radius(),
+        "snow_height": store::snow_height(), "snow_speed": store::snow_speed(), "snow_fall": store::snow_fall(), "mouse_radius": store::mouse_radius(), "plow_every": store::plow_every(), "snow_rclick": store::snow_rclick(),
         "ui_flags": st.get("ui_flags").cloned().unwrap_or(json!({})),
         "mr_dir": store::mr_root().to_string_lossy(), "mr_default": store::default_modrinth_dir().to_string_lossy(),
         "mr_is_default": g("modrinth_dir").is_empty(),

@@ -54,6 +54,14 @@ needs Orbit open, and cancels if the server is stopped by hand during the countd
 restart without a chat countdown. Stored per server in `orbit-server.json` as `auto_restart: {enabled, time, countdown}`. The local clock
 comes from the window (`tz_offset` setting, minutes east of UTC, refreshed every 15 minutes), because the standard library has no time zones.
 
+## Discord Rich Presence
+Settings > Discord shows "Playing <instance>" (with Minecraft version, loader and an elapsed timer) on your Discord profile while a game runs,
+or "Hosting <server>" while only a server runs, like the Modrinth app. Off by default; "Hide instance and server names" keeps private names out.
+It talks to the Discord desktop app over its local IPC pipe/socket (`src/discord.rs`, std only, no extra crates, no network port), and silently
+retries if Discord isn't open. **One-time setup:** create an application at https://discord.com/developers/applications (its name is what Discord
+shows after "Playing"), upload `assets/Orbit.png` as an art asset named `orbit` (Rich Presence > Art Assets), and put the application ID in
+`APP_ID` in `src/discord.rs` (or set `ORBIT_DISCORD_APP_ID`). Settings keys: `discord_presence`, `discord_hide_names`.
+
 ## Window
 - Windows: Orbit draws its own Modrinth-style top bar (back/forward, page title, downloads, "instances running" pill,
   minimise / maximise / close). Dragging the bar is handed to Windows itself, so edge-snapping, Win+Arrow and
